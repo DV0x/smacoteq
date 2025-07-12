@@ -11,7 +11,8 @@ const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/jpg', 
   'image/png',
-  'image/webp'
+  'image/webp',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
 ];
 const PROCESSING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
@@ -68,7 +69,7 @@ async function validateUploadedFile(file: File, fieldName: string): Promise<void
   
   // Validate file type
   if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-    throw new Error(`${fieldName} must be PDF, JPG, PNG, or WebP format`);
+    throw new Error(`${fieldName} must be PDF, JPG, PNG, WebP, or DOCX format`);
   }
   
   // Additional validation using our helper

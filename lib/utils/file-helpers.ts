@@ -17,11 +17,18 @@ export async function fileToBase64(file: File): Promise<string> {
 }
 
 export function validateFile(file: File): { valid: boolean; error?: string } {
-  const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+  const allowedTypes = [
+    'application/pdf', 
+    'image/jpeg', 
+    'image/jpg',
+    'image/png', 
+    'image/webp',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
+  ];
   const maxSize = 50 * 1024 * 1024; // 50MB
   
   if (!allowedTypes.includes(file.type)) {
-    return { valid: false, error: 'Invalid file type. Please upload PDF, JPG, or PNG.' };
+    return { valid: false, error: 'Invalid file type. Please upload PDF, JPG, PNG, WebP, or DOCX.' };
   }
   
   if (file.size > maxSize) {
