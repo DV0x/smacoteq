@@ -44,7 +44,7 @@ export default function FileUpload({ label, name, onFileSelect }: FileUploadProp
           const convertedFile = await convertDocToDocx(file);
           setFileName(convertedFile.name);
           onFileSelect(convertedFile);
-        } catch (error) {
+        } catch {
           alert('Failed to convert .doc file. Please try saving it as .docx format manually.');
           // Reset the input
           if (inputRef.current) {
@@ -82,7 +82,7 @@ export default function FileUpload({ label, name, onFileSelect }: FileUploadProp
           const convertedFile = await convertDocToDocx(file);
           setFileName(convertedFile.name);
           onFileSelect(convertedFile);
-        } catch (error) {
+        } catch {
           alert('Failed to convert .doc file. Please try saving it as .docx format manually.');
         } finally {
           setIsConverting(false);
