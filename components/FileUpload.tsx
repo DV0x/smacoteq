@@ -11,17 +11,47 @@ interface FileUploadProps {
 export default function FileUpload({ label, name, onFileSelect }: FileUploadProps) {
   const [fileName, setFileName] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const convertDocToDocx = async (file: File): Promise<File> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/convert-doc', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Conversion failed');
+    }
+
+    const blob = await response.blob();
+    const convertedFileName = file.name.replace(/\.doc$/i, '.pdf');
+    return new File([blob], convertedFileName, {
+      type: 'application/pdf'
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (file) {
-      // Check if it's a .doc file
+      // Check if it's a .doc file and convert it
       if (file.name.toLowerCase().endsWith('.doc') && !file.name.toLowerCase().endsWith('.docx')) {
-        alert('Please save your document as .docx format instead of .doc. In Microsoft Word, use "Save As" and select "Word Document (.docx)" as the file type.');
-        // Reset the input
-        if (inputRef.current) {
-          inputRef.current.value = '';
+        setIsConverting(true);
+        try {
+          const convertedFile = await convertDocToDocx(file);
+          setFileName(convertedFile.name);
+          onFileSelect(convertedFile);
+        } catch (error) {
+          alert('Failed to convert .doc file. Please try saving it as .docx format manually.');
+          // Reset the input
+          if (inputRef.current) {
+            inputRef.current.value = '';
+          }
+        } finally {
+          setIsConverting(false);
         }
         return;
       }
@@ -39,15 +69,24 @@ export default function FileUpload({ label, name, onFileSelect }: FileUploadProp
     setIsDragging(false);
   };
   
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     
     const file = e.dataTransfer.files[0];
     if (file) {
-      // Check if it's a .doc file
+      // Check if it's a .doc file and convert it
       if (file.name.toLowerCase().endsWith('.doc') && !file.name.toLowerCase().endsWith('.docx')) {
-        alert('Please save your document as .docx format instead of .doc. In Microsoft Word, use "Save As" and select "Word Document (.docx)" as the file type.');
+        setIsConverting(true);
+        try {
+          const convertedFile = await convertDocToDocx(file);
+          setFileName(convertedFile.name);
+          onFileSelect(convertedFile);
+        } catch (error) {
+          alert('Failed to convert .doc file. Please try saving it as .docx format manually.');
+        } finally {
+          setIsConverting(false);
+        }
         return;
       }
       setFileName(file.name);
@@ -83,11 +122,28 @@ export default function FileUpload({ label, name, onFileSelect }: FileUploadProp
           type="file"
           name={name}
           onChange={handleFileChange}
-          accept=".pdf,.jpg,.jpeg,.png,.webp,.docx"
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.doc"
           className="hidden"
         />
         
-        {fileName ? (
+        {isConverting ? (
+          <div className="space-y-3">
+            <div className="w-16 h-16 mx-auto bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+              <svg className="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <div>
+              <p className="text-base font-semibold text-blue-800">
+                Converting document...
+              </p>
+              <p className="text-sm text-blue-600 mt-1">
+                Converting .doc to PDF format
+              </p>
+            </div>
+          </div>
+        ) : fileName ? (
           <div className="space-y-3">
             <div className="w-16 h-16 mx-auto bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
               <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -148,7 +204,7 @@ export default function FileUpload({ label, name, onFileSelect }: FileUploadProp
                   <svg className="w-4 h-4 mr-1 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
-                  DOCX
+                  DOC/DOCX
                 </span>
               </p>
               <p className="text-xs text-gray-400 mt-1">

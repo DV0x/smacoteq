@@ -13,15 +13,32 @@ export async function extractTextFromDocument(file: File): Promise<string> {
     // Determine document type based on file type
     const isImage = file.type.startsWith('image/');
     
+    // Map MIME types to formats Mistral OCR accepts
+    const getMimeTypeForMistral = (originalType: string): string => {
+      if (originalType.includes('wordprocessingml')) {
+        return 'application/docx';
+      }
+      if (originalType === 'application/pdf') {
+        return 'application/pdf';
+      }
+      if (originalType.startsWith('image/')) {
+        return originalType;
+      }
+      // Default fallback
+      return originalType;
+    };
+    
+    const mistralMimeType = getMimeTypeForMistral(file.type);
+    
     // Use Mistral's OCR API with mistral-ocr-latest model
     const documentPayload = isImage 
       ? {
           type: 'image_url' as const,
-          imageUrl: `data:${file.type};base64,${base64Data}`
+          imageUrl: `data:${mistralMimeType};base64,${base64Data}`
         }
       : {
           type: 'document_url' as const,
-          documentUrl: `data:${file.type};base64,${base64Data}`
+          documentUrl: `data:${mistralMimeType};base64,${base64Data}`
         };
     
     const ocrResponse = await client.ocr.process({
@@ -61,15 +78,33 @@ export async function extractFromCombinedDocument(
     // Determine document type based on file type
     const isImage = file.type.startsWith('image/');
     
+    // Map MIME types to formats Mistral OCR accepts
+    const getMimeTypeForMistral = (originalType: string): string => {
+      if (originalType.includes('wordprocessingml')) {
+        return 'application/docx';
+      }
+      if (originalType === 'application/pdf') {
+        return 'application/pdf';
+      }
+      if (originalType.startsWith('image/')) {
+        return originalType;
+      }
+      // Default fallback
+      return originalType;
+    };
+    
+    const mistralMimeType = getMimeTypeForMistral(file.type);
+    console.log(`Original MIME type: ${file.type}, Mistral MIME type: ${mistralMimeType}`);
+    
     // Use Mistral's OCR API with mistral-ocr-latest model
     const documentPayload = isImage 
       ? {
           type: 'image_url' as const,
-          imageUrl: `data:${file.type};base64,${base64Data}`
+          imageUrl: `data:${mistralMimeType};base64,${base64Data}`
         }
       : {
           type: 'document_url' as const,
-          documentUrl: `data:${file.type};base64,${base64Data}`
+          documentUrl: `data:${mistralMimeType};base64,${base64Data}`
         };
     
     const ocrResponse = await client.ocr.process({
@@ -98,7 +133,8 @@ export async function extractFromCombinedDocument(
       
       // Keywords to identify commercial invoice  
       const invoiceKeywords = [
-        'commercial invoice'
+        'commercial invoice',
+        'invoice'
       ];
       
       const packingScore = packingListKeywords.reduce((score, keyword) => 
@@ -166,13 +202,25 @@ export async function extractFromCombinedDocument(
       .map(page => `\n\n${page.header}\n\n${page.content}`)
       .join('');
     
-    // Validate that we have content for both documents
-    if (!packingListText || packingListText.trim().length < 10) {
-      throw new Error('Could not identify packing list content in the combined document');
+    // Check if this is a single document (only one type identified)
+    const hasPackingContent = packingListText && packingListText.trim().length >= 10;
+    const hasInvoiceContent = invoiceText && invoiceText.trim().length >= 10;
+    
+    if (!hasPackingContent && !hasInvoiceContent) {
+      throw new Error('Could not identify any document content');
     }
     
-    if (!invoiceText || invoiceText.trim().length < 10) {
-      throw new Error('Could not identify commercial invoice content in the combined document');
+    // Handle single document case
+    if (!hasPackingContent || !hasInvoiceContent) {
+      const singleDocumentText = hasPackingContent ? packingListText : invoiceText;
+      const documentType = hasPackingContent ? 'packing list' : 'commercial invoice';
+      
+      console.log(`Single document detected: ${documentType}`);
+      
+      return {
+        packingListText: hasPackingContent ? packingListText : singleDocumentText,
+        invoiceText: hasInvoiceContent ? invoiceText : singleDocumentText
+      };
     }
     
     console.log('Successfully separated combined document:', {
