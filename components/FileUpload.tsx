@@ -16,6 +16,15 @@ export default function FileUpload({ label, name, onFileSelect }: FileUploadProp
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (file) {
+      // Check if it's a .doc file
+      if (file.name.toLowerCase().endsWith('.doc') && !file.name.toLowerCase().endsWith('.docx')) {
+        alert('Please save your document as .docx format instead of .doc. In Microsoft Word, use "Save As" and select "Word Document (.docx)" as the file type.');
+        // Reset the input
+        if (inputRef.current) {
+          inputRef.current.value = '';
+        }
+        return;
+      }
       setFileName(file.name);
       onFileSelect(file);
     }
@@ -36,6 +45,11 @@ export default function FileUpload({ label, name, onFileSelect }: FileUploadProp
     
     const file = e.dataTransfer.files[0];
     if (file) {
+      // Check if it's a .doc file
+      if (file.name.toLowerCase().endsWith('.doc') && !file.name.toLowerCase().endsWith('.docx')) {
+        alert('Please save your document as .docx format instead of .doc. In Microsoft Word, use "Save As" and select "Word Document (.docx)" as the file type.');
+        return;
+      }
       setFileName(file.name);
       onFileSelect(file);
     }
