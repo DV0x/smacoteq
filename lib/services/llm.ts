@@ -1,95 +1,9 @@
 import OpenAI from 'openai';
+import type { BOLData } from '@/types';
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY! 
 });
-
-interface BOLData {
-  // Party Information
-  shipper: {
-    name: string;
-    address: string;
-    city: string;
-    country: string;
-    phone?: string;
-  };
-  consignee: {
-    name: string;
-    address: string;
-    city: string;
-    country: string;
-    phone?: string;
-    is_negotiable?: boolean; // For "To Order" marking
-  };
-  notify_party?: {
-    name: string;
-    address: string;
-  };
-  
-  // Reference Numbers
-  booking_ref?: string;
-  shipper_ref?: string;
-  imo_number?: string;
-  rider_pages?: number;
-  bl_sequence?: string; // Number & sequence of original B/Ls
-  
-  // Transport Details
-  vessel_details?: {
-    vessel_name: string;
-    voyage_number: string;
-  };
-  ports: {
-    loading: string;
-    discharge: string;
-    delivery?: string;
-  };
-  place_of_receipt?: string;
-  place_of_delivery?: string;
-  shipped_on_board_date?: string;
-  place_and_date_of_issue?: string;
-  
-  // Discharge Agent
-  discharge_agent?: string;
-  transport_type?: 'Port-To-Port' | 'Combined Transport';
-  
-  // Cargo Information
-  cargo: Array<{
-    container_numbers?: string;
-    seal_numbers?: string;
-    marks?: string;
-    description: string;
-    gross_weight: string;
-    measurement?: string;
-  }>;
-  
-  // Totals
-  totals: {
-    packages: number;
-    gross_weight: string;
-    measurement?: string;
-  };
-  
-  // Commercial Information
-  freight_charges?: string;
-  declared_value?: string;
-  carrier_receipt?: string;
-  
-  // Legacy fields for backward compatibility
-  invoice_details?: {
-    number: string;
-    date: string;
-    value: string;
-    currency: string;
-  };
-  freight_terms?: string;
-  payment_terms?: string;
-  special_instructions?: string;
-  date_of_shipment?: string;
-  
-  // Authentication
-  carrier_endorsements?: string;
-  signed_by?: string;
-}
 
 export async function generateBOL(
   packingListText: string, 
