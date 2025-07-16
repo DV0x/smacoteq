@@ -18,6 +18,7 @@ export interface BOLData {
   notify_party?: {
     name: string;
     address: string;
+    phone?: string;
   };
   
   // Reference Numbers
@@ -26,6 +27,10 @@ export interface BOLData {
   imo_number?: string;
   rider_pages?: number;
   bl_sequence?: string; // Number & sequence of original B/Ls
+  
+  // Additional fields from pdf.md specification
+  original_bl_count?: string; // Number of original B/Ls issued
+  hs_code?: string; // H.S. Code for customs declaration
   
   // Transport Details
   vessel_details?: {
