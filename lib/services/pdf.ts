@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib';
 
 interface BOLData {
+  // Party Information
   shipper: {
     name: string;
     address: string;
@@ -14,11 +15,21 @@ interface BOLData {
     city: string;
     country: string;
     phone?: string;
+    is_negotiable?: boolean; // For "To Order" marking
   };
   notify_party?: {
     name: string;
     address: string;
   };
+  
+  // Reference Numbers
+  booking_ref?: string;
+  shipper_ref?: string;
+  imo_number?: string;
+  rider_pages?: number;
+  bl_sequence?: string; // Number & sequence of original B/Ls
+  
+  // Transport Details
   vessel_details?: {
     vessel_name: string;
     voyage_number: string;
@@ -28,37 +39,55 @@ interface BOLData {
     discharge: string;
     delivery?: string;
   };
+  place_of_receipt?: string;
+  place_of_delivery?: string;
+  shipped_on_board_date?: string;
+  place_and_date_of_issue?: string;
+  
+  // Discharge Agent
+  discharge_agent?: string;
+  transport_type?: 'Port-To-Port' | 'Combined Transport';
+  
+  // Cargo Information
   cargo: Array<{
+    container_numbers?: string;
+    seal_numbers?: string;
+    marks?: string;
     description: string;
-    hs_code?: string;
-    quantity: number;
-    unit: string;
-    weight: string;
-    volume?: string;
+    gross_weight: string;
+    measurement?: string;
   }>;
-  container_info?: {
-    numbers: string[];
-    seal_numbers?: string[];
-    type?: string;
-  };
+  
+  // Totals
   totals: {
     packages: number;
     gross_weight: string;
     measurement?: string;
   };
-  invoice_details: {
+  
+  // Commercial Information
+  freight_charges?: string;
+  declared_value?: string;
+  carrier_receipt?: string;
+  
+  // Legacy fields for backward compatibility
+  invoice_details?: {
     number: string;
     date: string;
     value: string;
     currency: string;
   };
-  freight_terms: string;
+  freight_terms?: string;
   payment_terms?: string;
   special_instructions?: string;
   date_of_shipment?: string;
+  
+  // Authentication
+  carrier_endorsements?: string;
+  signed_by?: string;
 }
 
-export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string | null): Promise<Uint8Array> {
+export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string | null, customBookingNumber?: string | null): Promise<Uint8Array> {
   // Create a new PDF document with A4 size
   const pdfDoc = await PDFDocument.create();
   let currentPage = pdfDoc.addPage(PageSizes.A4);
@@ -68,15 +97,11 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
   
-  // Professional color scheme
-  const primaryBlue = rgb(0.0, 0.23, 0.47);     // Professional navy blue
-  const accentBlue = rgb(0.2, 0.4, 0.7);        // Lighter blue for accents
-  const borderGray = rgb(0.6, 0.6, 0.6);        // Medium gray borders
-  const lightGray = rgb(0.97, 0.97, 0.97);      // Very light gray background
-  const mediumGray = rgb(0.9, 0.9, 0.9);        // Medium gray for alternating rows
-  const darkGray = rgb(0.3, 0.3, 0.3);          // Dark gray for text
+  // Traditional BOL color scheme - simplified black and white
   const black = rgb(0, 0, 0);
   const white = rgb(1, 1, 1);
+  const borderGray = rgb(0.5, 0.5, 0.5);        // Medium gray for borders
+  const lightGray = rgb(0.95, 0.95, 0.95);      // Very light gray for alternating rows
   
   // Helper function to draw text with intelligent word wrapping and overflow protection
   const drawText = (
@@ -221,22 +246,43 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
   // Helper function to draw table header
   const drawTableHeader = (page: typeof currentPage, startY: number, colWidths: number[]) => {
     const tableWidth = width - 60;
-    const headers = ['MARKS & NUMBERS', 'PKGS', 'DESCRIPTION OF GOODS', 'GROSS WEIGHT', 'MEASUREMENT', 'HS CODE'];
+    const headers = ['Container Numbers, Seal Numbers and Marks', 'Description of Packages and Goods', 'Gross Cargo Weight', 'Measurement'];
     
-    // Table header with gradient effect
+    // Add disclaimer header
+    page.drawText('PARTICULARS FURNISHED BY THE SHIPPER - NOT CHECKED BY CARRIER - CARRIER NOT RESPONSIBLE', {
+      x: 30,
+      y: startY + 5,
+      size: 8,
+      font: helveticaBold,
+      color: black
+    });
+    
+    // Table header with simple black border
     drawBox(page, 30, startY - 22, tableWidth, 22, { 
-      fillColor: primaryBlue,
-      borderWidth: 0
+      borderColor: black,
+      borderWidth: 1
     });
     
     let colX = 30;
     headers.forEach((header, index) => {
-      drawText(page, header, colX + 3, startY - 11, {
+      // Draw column dividers
+      if (index > 0) {
+        page.drawLine({
+          start: { x: colX, y: startY },
+          end: { x: colX, y: startY - 22 },
+          color: black,
+          thickness: 1
+        });
+      }
+      
+      drawText(page, header, colX + 3, startY - 16, {
         size: 8,
         font: helveticaBold,
-        color: white,
+        color: black,
         maxWidth: colWidths[index] - 6,
-        align: 'center'
+        align: 'center',
+        maxLines: 2,
+        lineHeight: 10
       });
       colX += colWidths[index];
     });
@@ -284,425 +330,583 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
   
   // Function to create the first page header
   const createFirstPageHeader = (page: typeof currentPage) => {
-    let yPos = height - 30;
+    let yPos = height - 20;
     
-    // === PROFESSIONAL HEADER SECTION ===
-    // Header background with gradient effect
-    drawBox(page, 0, height - 85, width, 85, { 
-      fillColor: lightGray, 
-      borderWidth: 0 
+    // === TRADITIONAL BOL HEADER SECTION ===
+    // Draw main header border box
+    drawBox(page, 20, height - 80, width - 40, 60, { 
+      borderColor: black,
+      borderWidth: 1
     });
     
-    // Main title with enhanced styling
-    const titleText = 'BILL OF LADING';
-    const titleWidth = helveticaBold.widthOfTextAtSize(titleText, 26);
-    page.drawText(titleText, {
-      x: (width - titleWidth) / 2,
-      y: yPos,
-      size: 26,
-      font: helveticaBold,
-      color: primaryBlue
+    // Left side - Company Logo area
+    drawBox(page, 25, height - 75, 200, 50, { 
+      borderColor: black,
+      borderWidth: 1
     });
     
-    yPos -= 30;
-    
-    // Subtitle with better positioning
-    const subtitleText = 'For Ocean Transport or Multimodal Transport';
-    const subtitleWidth = helvetica.widthOfTextAtSize(subtitleText, 11);
-    page.drawText(subtitleText, {
-      x: (width - subtitleWidth) / 2,
-      y: yPos,
-      size: 11,
+    // Logo placeholder text
+    page.drawText('Shipping Company Logo', {
+      x: 30,
+      y: height - 55,
+      size: 10,
       font: helvetica,
-      color: darkGray
+      color: black
     });
     
-    yPos -= 35;
+    // Right side - BOL Number section
+    const bolBoxX = 250;
+    const bolBoxWidth = width - bolBoxX - 25;
     
-    // Enhanced document info section
-    const docInfoY = yPos;
-    const infoBoxWidth = 160;
-    const infoBoxHeight = 32;
-    
-    // BOL Number box with professional styling
-    drawBox(page, width - infoBoxWidth - 20, docInfoY - infoBoxHeight, infoBoxWidth, infoBoxHeight, { 
-      fillColor: white, 
-      borderColor: primaryBlue,
-      borderWidth: 1,
-      shadow: true
+    drawBox(page, bolBoxX, height - 75, bolBoxWidth, 50, { 
+      borderColor: black,
+      borderWidth: 1
     });
     
-    page.drawText('B/L NUMBER', {
-      x: width - infoBoxWidth - 15,
-      y: docInfoY - 12,
-      size: 8,
-      font: helveticaBold,
-      color: primaryBlue
-    });
-    page.drawText(bolNumber, {
-      x: width - infoBoxWidth - 15,
-      y: docInfoY - 25,
-      size: 11,
+    // BOL Number title and value
+    page.drawText('BILL OF LADING No.', {
+      x: bolBoxX + 10,
+      y: height - 35,
+      size: 12,
       font: helveticaBold,
       color: black
     });
     
-    // Date box with enhanced styling
-    drawBox(page, width - infoBoxWidth - 20, docInfoY - (infoBoxHeight * 2) - 5, infoBoxWidth, infoBoxHeight, { 
-      fillColor: white, 
-      borderColor: primaryBlue,
-      borderWidth: 1,
-      shadow: true
-    });
-    
-    page.drawText('DATE OF ISSUE', {
-      x: width - infoBoxWidth - 15,
-      y: docInfoY - infoBoxHeight - 12,
-      size: 8,
-      font: helveticaBold,
-      color: primaryBlue
-    });
-    
-    drawText(page, currentDate, width - infoBoxWidth - 15, docInfoY - infoBoxHeight - 25, {
-      size: 9,
+    // Add DRAFT watermark if needed
+    page.drawText('DRAFT', {
+      x: bolBoxX + 10,
+      y: height - 50,
+      size: 10,
       font: helvetica,
-      color: black,
-      maxWidth: infoBoxWidth - 10
+      color: borderGray
     });
     
-    return yPos - 80;
+    // BOL Number value
+    page.drawText(bolNumber, {
+      x: bolBoxX + 10,
+      y: height - 65,
+      size: 14,
+      font: helveticaBold,
+      color: black
+    });
+    
+    return height - 90; // Return Y position for next section
   };
 
   // Function to create continuation page header
   const createContinuationHeader = (page: typeof currentPage, pageNum: number) => {
-    let yPos = height - 30;
+    let yPos = height - 20;
     
-    // Simple header for continuation pages
-    drawBox(page, 0, height - 60, width, 60, { 
-      fillColor: lightGray, 
-      borderWidth: 0 
+    // === RIDER PAGE HEADER SECTION ===
+    // Draw main header border box
+    drawBox(page, 20, height - 80, width - 40, 60, { 
+      borderColor: black,
+      borderWidth: 1
     });
     
-    const titleText = `BILL OF LADING - CONTINUATION (Page ${pageNum})`;
-    const titleWidth = helveticaBold.widthOfTextAtSize(titleText, 18);
-    page.drawText(titleText, {
-      x: (width - titleWidth) / 2,
-      y: yPos,
-      size: 18,
-      font: helveticaBold,
-      color: primaryBlue
+    // Left side - Company Logo area
+    drawBox(page, 25, height - 75, 200, 50, { 
+      borderColor: black,
+      borderWidth: 1
     });
     
-    yPos -= 25;
-    
-    // BOL Number reference
-    page.drawText(`B/L Number: ${bolNumber}`, {
-      x: (width - helvetica.widthOfTextAtSize(`B/L Number: ${bolNumber}`, 12)) / 2,
-      y: yPos,
-      size: 12,
+    // Logo placeholder text
+    page.drawText('Shipping Company Logo', {
+      x: 30,
+      y: height - 55,
+      size: 10,
       font: helvetica,
-      color: darkGray
+      color: black
     });
     
-    return yPos - 40;
+    // Right side - BOL Number and Rider Page info
+    const bolBoxX = 250;
+    const bolBoxWidth = width - bolBoxX - 25;
+    
+    drawBox(page, bolBoxX, height - 75, bolBoxWidth, 50, { 
+      borderColor: black,
+      borderWidth: 1
+    });
+    
+    // BOL Number title and value
+    page.drawText('BILL OF LADING No.', {
+      x: bolBoxX + 10,
+      y: height - 35,
+      size: 12,
+      font: helveticaBold,
+      color: black
+    });
+    
+    // Add RIDER PAGE designation
+    page.drawText('RIDER PAGE', {
+      x: bolBoxX + 10,
+      y: height - 50,
+      size: 10,
+      font: helveticaBold,
+      color: black
+    });
+    
+    // Page number
+    page.drawText(`Page ${pageNum}`, {
+      x: bolBoxX + 120,
+      y: height - 50,
+      size: 10,
+      font: helvetica,
+      color: black
+    });
+    
+    // BOL Number value
+    page.drawText(bolNumber, {
+      x: bolBoxX + 10,
+      y: height - 65,
+      size: 14,
+      font: helveticaBold,
+      color: black
+    });
+    
+    return height - 90; // Return Y position for next section
   };
 
   let yPosition = createFirstPageHeader(currentPage);
   let pageNumber = 1;
   
-  // === ENHANCED PARTY INFORMATION SECTION ===
-  const sectionHeight = 75;
-  const sectionWidth = (width - 70) / 3;
-  const sectionSpacing = 5;
+  // === TRADITIONAL BOL TWO-COLUMN LAYOUT ===
+  const leftColumnWidth = (width - 60) / 2;
+  const rightColumnWidth = (width - 60) / 2;
+  const columnSpacing = 10;
+  const leftX = 30;
+  const rightX = leftX + leftColumnWidth + columnSpacing;
   
-  // Shipper section with enhanced styling
-  drawBox(currentPage, 30, yPosition - sectionHeight, sectionWidth, sectionHeight, { 
-    fillColor: white,
-    borderColor: primaryBlue,
-    borderWidth: 1,
-    shadow: true
+  // Draw main information block border
+  drawBox(currentPage, 20, yPosition - 200, width - 40, 200, { 
+    borderColor: black,
+    borderWidth: 1
   });
   
-  // Header with colored background
-  drawBox(currentPage, 30, yPosition - 18, sectionWidth, 18, { 
-    fillColor: primaryBlue,
-    borderWidth: 0
+  // === LEFT COLUMN ===
+  
+  // Shipper section
+  let currentY = yPosition - 10;
+  drawBox(currentPage, leftX, currentY - 70, leftColumnWidth, 70, { 
+    borderColor: black,
+    borderWidth: 1
   });
   
-  currentPage.drawText('SHIPPER (EXPORTER)', {
-    x: 35,
-    y: yPosition - 13,
-    size: 9,
+  currentPage.drawText('SHIPPER:', {
+    x: leftX + 5,
+    y: currentY - 15,
+    size: 10,
     font: helveticaBold,
-    color: white
+    color: black
   });
   
-  let shipperY = yPosition - 28;
-  shipperY = drawText(currentPage, bolData.shipper?.name || '', 35, shipperY, { 
-    size: 8, 
-    font: helveticaBold,
+  let shipperY = currentY - 25;
+  shipperY = drawText(currentPage, bolData.shipper?.name || '', leftX + 5, shipperY, { 
+    size: 9, 
+    font: helvetica,
     color: black,
-    maxWidth: sectionWidth - 10,
+    maxWidth: leftColumnWidth - 10,
     maxLines: 2
   });
-  shipperY = drawText(currentPage, bolData.shipper?.address || '', 35, shipperY, { 
-    size: 7,
-    color: darkGray,
-    maxWidth: sectionWidth - 10,
+  shipperY = drawText(currentPage, bolData.shipper?.address || '', leftX + 5, shipperY, { 
+    size: 9,
+    color: black,
+    maxWidth: leftColumnWidth - 10,
     maxLines: 2
   });
-  shipperY = drawText(currentPage, `${bolData.shipper?.city || ''}, ${bolData.shipper?.country || ''}`, 35, shipperY, { 
-    size: 7,
-    color: darkGray,
-    maxWidth: sectionWidth - 10,
+  drawText(currentPage, `${bolData.shipper?.city || ''}, ${bolData.shipper?.country || ''}`, leftX + 5, shipperY, { 
+    size: 9,
+    color: black,
+    maxWidth: leftColumnWidth - 10,
     maxLines: 1
   });
-  if (bolData.shipper?.phone) {
-    drawText(currentPage, `Tel: ${bolData.shipper.phone}`, 35, shipperY, { 
-      size: 7,
-      color: accentBlue,
-      maxWidth: sectionWidth - 10,
-      maxLines: 1
-    });
-  }
   
-  // Consignee section with matching styling
-  const consigneeX = 35 + sectionWidth + sectionSpacing;
-  drawBox(currentPage, consigneeX, yPosition - sectionHeight, sectionWidth, sectionHeight, { 
-    fillColor: white,
-    borderColor: primaryBlue,
-    borderWidth: 1,
-    shadow: true
+  currentY -= 80;
+  
+  // Consignee section
+  drawBox(currentPage, leftX, currentY - 90, leftColumnWidth, 90, { 
+    borderColor: black,
+    borderWidth: 1
   });
   
-  drawBox(currentPage, consigneeX, yPosition - 18, sectionWidth, 18, { 
-    fillColor: primaryBlue,
-    borderWidth: 0
-  });
-  
-  currentPage.drawText('CONSIGNEE (IMPORTER)', {
-    x: consigneeX + 5,
-    y: yPosition - 13,
-    size: 9,
+  currentPage.drawText('CONSIGNEE: This B/L is not negotiable unless marked "To Order"', {
+    x: leftX + 5,
+    y: currentY - 15,
+    size: 8,
     font: helveticaBold,
-    color: white
+    color: black
+  });
+  currentPage.drawText('or "To Order of ..." here.', {
+    x: leftX + 5,
+    y: currentY - 25,
+    size: 8,
+    font: helveticaBold,
+    color: black
   });
   
-  let consigneeY = yPosition - 28;
-  consigneeY = drawText(currentPage, bolData.consignee?.name || '', consigneeX + 5, consigneeY, { 
-    size: 8, 
-    font: helveticaBold,
+  let consigneeY = currentY - 35;
+  consigneeY = drawText(currentPage, bolData.consignee?.name || '', leftX + 5, consigneeY, { 
+    size: 9, 
+    font: helvetica,
     color: black,
-    maxWidth: sectionWidth - 10,
+    maxWidth: leftColumnWidth - 10,
     maxLines: 2
   });
-  consigneeY = drawText(currentPage, bolData.consignee?.address || '', consigneeX + 5, consigneeY, { 
-    size: 7,
-    color: darkGray,
-    maxWidth: sectionWidth - 10,
+  consigneeY = drawText(currentPage, bolData.consignee?.address || '', leftX + 5, consigneeY, { 
+    size: 9,
+    color: black,
+    maxWidth: leftColumnWidth - 10,
     maxLines: 2
   });
-  consigneeY = drawText(currentPage, `${bolData.consignee?.city || ''}, ${bolData.consignee?.country || ''}`, consigneeX + 5, consigneeY, { 
-    size: 7,
-    color: darkGray,
-    maxWidth: sectionWidth - 10,
+  drawText(currentPage, `${bolData.consignee?.city || ''}, ${bolData.consignee?.country || ''}`, leftX + 5, consigneeY, { 
+    size: 9,
+    color: black,
+    maxWidth: leftColumnWidth - 10,
     maxLines: 1
   });
-  if (bolData.consignee?.phone) {
-    drawText(currentPage, `Tel: ${bolData.consignee.phone}`, consigneeX + 5, consigneeY, { 
-      size: 7,
-      color: accentBlue,
-      maxWidth: sectionWidth - 10,
-      maxLines: 1
-    });
-  }
   
-  // Notify Party section with consistent styling
-  const notifyX = 40 + (sectionWidth * 2) + (sectionSpacing * 2);
-  drawBox(currentPage, notifyX, yPosition - sectionHeight, sectionWidth, sectionHeight, { 
-    fillColor: white,
-    borderColor: primaryBlue,
-    borderWidth: 1,
-    shadow: true
+  currentY -= 100;
+  
+  // Notify Party section
+  drawBox(currentPage, leftX, currentY - 80, leftColumnWidth, 80, { 
+    borderColor: black,
+    borderWidth: 1
   });
   
-  drawBox(currentPage, notifyX, yPosition - 18, sectionWidth, 18, { 
-    fillColor: primaryBlue,
-    borderWidth: 0
-  });
-  
-  currentPage.drawText('NOTIFY PARTY', {
-    x: notifyX + 5,
-    y: yPosition - 13,
-    size: 9,
+  currentPage.drawText('NOTIFY PARTIES: (No responsibility shall attach to Carrier', {
+    x: leftX + 5,
+    y: currentY - 15,
+    size: 8,
     font: helveticaBold,
-    color: white
+    color: black
+  });
+  currentPage.drawText('or to his Agent for failure to notify)', {
+    x: leftX + 5,
+    y: currentY - 25,
+    size: 8,
+    font: helveticaBold,
+    color: black
   });
   
   if (bolData.notify_party) {
-    let notifyY = yPosition - 28;
-    notifyY = drawText(currentPage, bolData.notify_party.name || '', notifyX + 5, notifyY, { 
-      size: 8, 
-      font: helveticaBold,
-      color: black,
-      maxWidth: sectionWidth - 10,
-      maxLines: 2
-    });
-    drawText(currentPage, bolData.notify_party.address || '', notifyX + 5, notifyY, { 
-      size: 7,
-      color: darkGray,
-      maxWidth: sectionWidth - 10,
-      maxLines: 2
-    });
-  } else {
-    drawText(currentPage, 'SAME AS CONSIGNEE', notifyX + 5, yPosition - 40, { 
-      size: 8, 
+    let notifyY = currentY - 35;
+    notifyY = drawText(currentPage, bolData.notify_party.name || '', leftX + 5, notifyY, { 
+      size: 9, 
       font: helvetica,
-      color: borderGray,
-      maxWidth: sectionWidth - 10,
-      align: 'center'
+      color: black,
+      maxWidth: leftColumnWidth - 10,
+      maxLines: 2
+    });
+    drawText(currentPage, bolData.notify_party.address || '', leftX + 5, notifyY, { 
+      size: 9,
+      color: black,
+      maxWidth: leftColumnWidth - 10,
+      maxLines: 2
     });
   }
   
-  yPosition -= 85;
+  // === RIGHT COLUMN ===
   
-  // === ENHANCED VESSEL AND VOYAGE SECTION ===
-  const vesselSectionWidth = (width - 50) / 2;
-  
-  // Vessel with modern styling
-  drawBox(currentPage, 30, yPosition - 35, vesselSectionWidth, 35, {
-    fillColor: white,
-    borderColor: accentBlue,
+  // Booking and Shipper references
+  let rightY = yPosition - 10;
+  drawBox(currentPage, rightX, rightY - 35, rightColumnWidth, 35, { 
+    borderColor: black,
     borderWidth: 1
   });
-  drawBox(currentPage, 30, yPosition - 15, vesselSectionWidth, 15, { 
-    fillColor: accentBlue,
-    borderWidth: 0
-  });
   
-  currentPage.drawText('VESSEL NAME', {
-    x: 35,
-    y: yPosition - 11,
-    size: 8,
+  currentPage.drawText('BOOKING REF.', {
+    x: rightX + 5,
+    y: rightY - 15,
+    size: 10,
     font: helveticaBold,
-    color: white
+    color: black
   });
-  drawText(currentPage, bolData.vessel_details?.vessel_name || 'TBN (To Be Named)', 35, yPosition - 25, {
+  drawText(currentPage, bolData.booking_ref || customBookingNumber || '', rightX + 5, rightY - 25, { 
     size: 9,
     font: helvetica,
     color: black,
-    maxWidth: vesselSectionWidth - 10
+    maxWidth: rightColumnWidth - 10
   });
   
-  // Voyage with matching styling
-  const voyageX = 35 + vesselSectionWidth + 5;
-  drawBox(currentPage, voyageX, yPosition - 35, vesselSectionWidth, 35, {
-    fillColor: white,
-    borderColor: accentBlue,
+  rightY -= 45;
+  
+  drawBox(currentPage, rightX, rightY - 25, rightColumnWidth, 25, { 
+    borderColor: black,
     borderWidth: 1
   });
-  drawBox(currentPage, voyageX, yPosition - 15, vesselSectionWidth, 15, { 
-    fillColor: accentBlue,
-    borderWidth: 0
-  });
   
-  currentPage.drawText('VOYAGE NUMBER', {
-    x: voyageX + 5,
-    y: yPosition - 11,
-    size: 8,
+  currentPage.drawText('SHIPPER\'S REF.', {
+    x: rightX + 5,
+    y: rightY - 15,
+    size: 10,
     font: helveticaBold,
-    color: white
+    color: black
   });
-  drawText(currentPage, bolData.vessel_details?.voyage_number || 'TBN', voyageX + 5, yPosition - 25, {
+  drawText(currentPage, bolData.shipper_ref || '', rightX + 5, rightY - 25, { 
     size: 9,
     font: helvetica,
     color: black,
-    maxWidth: vesselSectionWidth - 10
+    maxWidth: rightColumnWidth - 10
   });
   
-  yPosition -= 45;
+  rightY -= 35;
   
-  // === ENHANCED PORTS SECTION ===
-  const portSectionWidth = (width - 70) / 3;
+  // Vessel and Voyage
+  drawBox(currentPage, rightX, rightY - 25, rightColumnWidth, 25, { 
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  currentPage.drawText('VESSEL AND VOYAGE NO', {
+    x: rightX + 5,
+    y: rightY - 15,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, `${bolData.vessel_details?.vessel_name || 'TBN'} / ${bolData.vessel_details?.voyage_number || 'TBN'}`, rightX + 5, rightY - 25, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: rightColumnWidth - 10
+  });
+  
+  rightY -= 35;
   
   // Port of Loading
-  drawBox(currentPage, 30, yPosition - 35, portSectionWidth, 35, {
-    fillColor: white,
-    borderColor: accentBlue,
+  drawBox(currentPage, rightX, rightY - 25, rightColumnWidth, 25, { 
+    borderColor: black,
     borderWidth: 1
-  });
-  drawBox(currentPage, 30, yPosition - 15, portSectionWidth, 15, { 
-    fillColor: accentBlue,
-    borderWidth: 0
   });
   
   currentPage.drawText('PORT OF LOADING', {
-    x: 35,
-    y: yPosition - 11,
-    size: 8,
+    x: rightX + 5,
+    y: rightY - 15,
+    size: 10,
     font: helveticaBold,
-    color: white
+    color: black
   });
-  drawText(currentPage, bolData.ports?.loading || '', 35, yPosition - 25, { 
-    size: 8,
+  drawText(currentPage, bolData.ports?.loading || '', rightX + 5, rightY - 25, { 
+    size: 9,
+    font: helvetica,
     color: black,
-    maxWidth: portSectionWidth - 10
+    maxWidth: rightColumnWidth - 10
   });
   
-  // Port of Discharge
-  const dischargeX = 35 + portSectionWidth + 5;
-  drawBox(currentPage, dischargeX, yPosition - 35, portSectionWidth, 35, {
-    fillColor: white,
-    borderColor: accentBlue,
+  rightY -= 35;
+  
+  // Shipped on Board Date
+  drawBox(currentPage, rightX, rightY - 25, rightColumnWidth, 25, { 
+    borderColor: black,
     borderWidth: 1
   });
-  drawBox(currentPage, dischargeX, yPosition - 15, portSectionWidth, 15, { 
-    fillColor: accentBlue,
-    borderWidth: 0
+  
+  currentPage.drawText('SHIPPED ON BOARD DATE', {
+    x: rightX + 5,
+    y: rightY - 15,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.shipped_on_board_date || currentDate, rightX + 5, rightY - 25, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: rightColumnWidth - 10
+  });
+  
+  rightY -= 35;
+  
+  // Port of Discharge
+  drawBox(currentPage, rightX, rightY - 25, rightColumnWidth, 25, { 
+    borderColor: black,
+    borderWidth: 1
   });
   
   currentPage.drawText('PORT OF DISCHARGE', {
-    x: dischargeX + 5,
-    y: yPosition - 11,
-    size: 8,
+    x: rightX + 5,
+    y: rightY - 15,
+    size: 10,
     font: helveticaBold,
-    color: white
+    color: black
   });
-  drawText(currentPage, bolData.ports?.discharge || '', dischargeX + 5, yPosition - 25, { 
-    size: 8,
+  drawText(currentPage, bolData.ports?.discharge || '', rightX + 5, rightY - 25, { 
+    size: 9,
+    font: helvetica,
     color: black,
-    maxWidth: portSectionWidth - 10
+    maxWidth: rightColumnWidth - 10
   });
   
-  // Final Destination
-  const destinationX = 40 + (portSectionWidth * 2) + 10;
-  drawBox(currentPage, destinationX, yPosition - 35, portSectionWidth, 35, {
-    fillColor: white,
-    borderColor: accentBlue,
+  yPosition -= 210;
+  
+  // === LOCATION INFORMATION BLOCK ===
+  drawBox(currentPage, 20, yPosition - 60, width - 40, 60, { 
+    borderColor: black,
     borderWidth: 1
   });
-  drawBox(currentPage, destinationX, yPosition - 15, portSectionWidth, 15, { 
-    fillColor: accentBlue,
-    borderWidth: 0
+  
+  // Left side - Place information
+  drawBox(currentPage, leftX, yPosition - 60, leftColumnWidth, 60, { 
+    borderColor: black,
+    borderWidth: 1
   });
   
-  currentPage.drawText('FINAL DESTINATION', {
-    x: destinationX + 5,
-    y: yPosition - 11,
+  currentPage.drawText('PLACE OF RECEIPT:', {
+    x: leftX + 5,
+    y: yPosition - 15,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.place_of_receipt || '', leftX + 5, yPosition - 25, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: leftColumnWidth - 10
+  });
+  
+  currentPage.drawText('PLACE OF DELIVERY:', {
+    x: leftX + 5,
+    y: yPosition - 40,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.place_of_delivery || bolData.ports?.delivery || '', leftX + 5, yPosition - 50, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: leftColumnWidth - 10
+  });
+  
+  // Add "NO. OF RIDER PAGES" field
+  currentPage.drawText('NO. OF RIDER PAGES', {
+    x: leftX + 5,
+    y: yPosition - 55,
     size: 8,
     font: helveticaBold,
-    color: white
+    color: black
   });
-  drawText(currentPage, bolData.ports?.delivery || bolData.ports?.discharge || '', destinationX + 5, yPosition - 25, { 
-    size: 8,
+  drawText(currentPage, (bolData.rider_pages || 0).toString(), leftX + 120, yPosition - 55, { 
+    size: 9,
+    font: helvetica,
     color: black,
-    maxWidth: portSectionWidth - 10
+    maxWidth: 50
+  });
+  
+  // Right side - Commercial information
+  drawBox(currentPage, rightX, yPosition - 60, rightColumnWidth, 60, { 
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  currentPage.drawText('FREIGHT & CHARGES', {
+    x: rightX + 5,
+    y: yPosition - 15,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.freight_charges || bolData.freight_terms || '', rightX + 5, yPosition - 25, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: rightColumnWidth - 10
+  });
+  
+  currentPage.drawText('DECLARED VALUE', {
+    x: rightX + 5,
+    y: yPosition - 40,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.declared_value || '', rightX + 5, yPosition - 50, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: rightColumnWidth - 10
+  });
+  
+  yPosition -= 70;
+  
+  // === AGENT AND REFERENCE INFORMATION ===
+  currentPage.drawText('PORT OF DISCHARGE AGENT:', {
+    x: 30,
+    y: yPosition - 10,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.discharge_agent || '', 30, yPosition - 20, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: width - 60
+  });
+  
+  yPosition -= 35;
+  
+  currentPage.drawText('"Port-To-Port" or "Combined Transport"', {
+    x: 30,
+    y: yPosition - 10,
+    size: 10,
+    font: helvetica,
+    color: black
+  });
+  drawText(currentPage, bolData.transport_type || 'Port-To-Port', 30, yPosition - 20, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: width - 60
+  });
+  
+  yPosition -= 35;
+  
+  // Place and date of issue with IMO number
+  drawBox(currentPage, 20, yPosition - 30, leftColumnWidth + 50, 30, { 
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  currentPage.drawText('PLACE AND DATE OF ISSUE', {
+    x: 25,
+    y: yPosition - 15,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.place_and_date_of_issue || currentDate, 25, yPosition - 25, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: leftColumnWidth + 40
+  });
+  
+  // IMO Number on the right
+  drawBox(currentPage, leftColumnWidth + 80, yPosition - 30, rightColumnWidth - 30, 30, { 
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  currentPage.drawText('IMO Number:', {
+    x: leftColumnWidth + 85,
+    y: yPosition - 15,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  drawText(currentPage, bolData.imo_number || '', leftColumnWidth + 85, yPosition - 25, { 
+    size: 9,
+    font: helvetica,
+    color: black,
+    maxWidth: rightColumnWidth - 40
   });
   
   yPosition -= 50;
   
-  // === MULTI-PAGE CARGO DETAILS TABLE ===
-  const colWidths = [70, 55, 180, 75, 60, 60];
+  // === TRADITIONAL BOL CARGO DETAILS TABLE ===
+  const colWidths = [140, 240, 90, 90]; // 4 columns for traditional BOL format
   const tableWidth = width - 60;
   const actualRowHeight = 20;
   const tableHeaderHeight = 32; // Height of table header
@@ -765,62 +969,50 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
       
       let colX = 30;
       
-      // Marks & Numbers
-      drawText(currentPage, `CTNS ${cargoIndex + index + 1}-${item.quantity}`, colX + 3, currentRowY - 8, {
-        size: 7,
-        font: helvetica,
-        color: darkGray,
-        maxWidth: colWidths[0] - 6
-      });
-      colX += colWidths[0];
+      // Container Numbers, Seal Numbers and Marks
+      const containerInfo = [
+        item.container_numbers || '',
+        item.seal_numbers || '',
+        item.marks || `CTNS ${cargoIndex + index + 1}-${bolData.totals?.packages || ''}`
+      ].filter(info => info).join('\n');
       
-      // Number of packages
-      drawText(currentPage, `${item.quantity} ${item.unit}`, colX + 3, currentRowY - 8, {
+      drawText(currentPage, containerInfo, colX + 3, currentRowY - 8, {
         size: 7,
         font: helvetica,
         color: black,
-        maxWidth: colWidths[1] - 6,
-        align: 'center'
+        maxWidth: colWidths[0] - 6,
+        lineHeight: 9,
+        maxLines: 3
       });
-      colX += colWidths[1];
+      colX += colWidths[0];
       
-      // Description with better wrapping
+      // Description of Packages and Goods
       drawText(currentPage, item.description || '', colX + 3, currentRowY - 8, { 
         size: 7,
         font: helvetica,
         color: black,
-        maxWidth: colWidths[2] - 6,
+        maxWidth: colWidths[1] - 6,
         lineHeight: 9,
         maxLines: 2
       });
+      colX += colWidths[1];
+      
+      // Gross Cargo Weight
+      drawText(currentPage, item.gross_weight || '', colX + 3, currentRowY - 8, {
+        size: 7,
+        font: helvetica,
+        color: black,
+        maxWidth: colWidths[2] - 6,
+        align: 'center'
+      });
       colX += colWidths[2];
       
-      // Weight
-      drawText(currentPage, item.weight || '', colX + 3, currentRowY - 8, {
+      // Measurement
+      drawText(currentPage, item.measurement || '', colX + 3, currentRowY - 8, {
         size: 7,
         font: helvetica,
         color: black,
         maxWidth: colWidths[3] - 6,
-        align: 'center'
-      });
-      colX += colWidths[3];
-      
-      // Measurement
-      drawText(currentPage, item.volume || '', colX + 3, currentRowY - 8, {
-        size: 7,
-        font: helvetica,
-        color: black,
-        maxWidth: colWidths[4] - 6,
-        align: 'center'
-      });
-      colX += colWidths[4];
-      
-      // HS Code
-      drawText(currentPage, item.hs_code || '', colX + 3, currentRowY - 8, {
-        size: 7,
-        font: helvetica,
-        color: accentBlue,
-        maxWidth: colWidths[5] - 6,
         align: 'center'
       });
       
@@ -854,8 +1046,8 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
   
   // Always show totals and footer on the final page
   drawBox(currentPage, 30, yPosition - 28, tableWidth, 28, { 
-    fillColor: mediumGray,
-    borderColor: primaryBlue,
+    fillColor: lightGray,
+    borderColor: black,
     borderWidth: 1
   });
   
@@ -864,7 +1056,7 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
     y: yPosition - 18,
     size: 10,
     font: helveticaBold,
-    color: primaryBlue
+    color: black
   });
   
   const totalPackages = bolData.totals?.packages || 0;
@@ -905,11 +1097,11 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
   // Freight Terms with modern styling
   drawBox(currentPage, 30, yPosition - 50, footerSectionWidth, 50, {
     fillColor: white,
-    borderColor: primaryBlue,
+    borderColor: black,
     borderWidth: 1
   });
   drawBox(currentPage, 30, yPosition - 15, footerSectionWidth, 15, { 
-    fillColor: primaryBlue,
+    fillColor: black,
     borderWidth: 0
   });
   
@@ -932,7 +1124,7 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
     drawText(currentPage, `Payment: ${bolData.payment_terms}`, 35, yPosition - 40, {
       size: 8,
       font: helvetica,
-      color: darkGray,
+      color: black,
       maxWidth: footerSectionWidth - 10
     });
   }
@@ -941,11 +1133,11 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
   const invoiceX = 35 + footerSectionWidth + 5;
   drawBox(currentPage, invoiceX, yPosition - 50, footerSectionWidth, 50, {
     fillColor: white,
-    borderColor: primaryBlue,
+    borderColor: black,
     borderWidth: 1
   });
   drawBox(currentPage, invoiceX, yPosition - 15, footerSectionWidth, 15, { 
-    fillColor: primaryBlue,
+    fillColor: black,
     borderWidth: 0
   });
   
@@ -966,27 +1158,235 @@ export async function generateBOLPDF(bolData: BOLData, customBolNumber?: string 
   drawText(currentPage, `Date: ${bolData.invoice_details?.date || 'N/A'}`, invoiceX + 5, yPosition - 35, {
     size: 8,
     font: helvetica,
-    color: darkGray,
+    color: black,
     maxWidth: footerSectionWidth - 10
   });
   drawText(currentPage, `Value: ${bolData.invoice_details?.currency || ''} ${bolData.invoice_details?.value || 'N/A'}`, invoiceX + 5, yPosition - 45, {
     size: 8,
     font: helvetica,
-    color: darkGray,
+    color: black,
     maxWidth: footerSectionWidth - 10
   });
   
-  yPosition -= 60;
+  yPosition -= 70;
   
-  // === LEGAL NOTICE ===
-  if (yPosition > 40) {
-    drawText(currentPage, 'This Bill of Lading is evidence of a contract of carriage and receipt of goods in apparent good order and condition unless otherwise noted.', 30, yPosition - 10, {
+  // === CARRIER'S RECEIPT SECTION ===
+  currentPage.drawText('CARRIER\'S RECEIPT', {
+    x: 30,
+    y: yPosition - 10,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  
+  drawBox(currentPage, 30, yPosition - 40, width - 60, 25, {
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  drawText(currentPage, bolData.carrier_receipt || '', 30, yPosition - 30, {
+    size: 8,
+    font: helvetica,
+    color: black,
+    maxWidth: width - 70,
+    maxLines: 2
+  });
+  
+  yPosition -= 50;
+  
+  // === COMPREHENSIVE LEGAL TERMS AND CONDITIONS ===
+  const legalTexts = [
+    'RECEIVED by the Carrier in apparent good order and condition (unless otherwise stated herein) the total number or quantity of Containers or other packages or units indicated in the box entitled Carrier\'s Receipt for carriage subject to all the terms and conditions hereof from the Place of Receipt or Port of Loading to the Port of Discharge or Place of Delivery, whichever is applicable. IN ACCEPTING THIS BILL OF LADING THE MERCHANT EXPRESSLY ACCEPTS AND AGREES TO ALL THE TERMS AND CONDITIONS, WHETHER PRINTED, STAMPED OR OTHERWISE INCORPORATED ON THIS SIDE AND ON THE REVERSE SIDE OF THIS BILL OF LADING AND THE TERMS AND CONDITIONS OF THE CARRIER\'S APPLICABLE TARIFF AS IF THEY WERE ALL SIGNED BY THE MERCHANT.',
+    
+    'If this is a negotiable (To Order / of) Bill of Lading, one original Bill of Lading, duly endorsed must be surrendered by the Merchant to the Carrier (together with outstanding Freight and charges) in exchange for the Goods or a Delivery Order. If this is a non-negotiable (straight) Bill of Lading, the Carrier shall deliver the Goods or issue a Delivery Order (after payment of outstanding Freight and charges) against the surrender of one original Bill of Lading or in accordance with the national law at the Port of Discharge or Place of Delivery whichever is applicable.',
+    
+    'IN WITNESS WHEREOF the Carrier or their Agent has signed the number of Bills of Lading stated at the top, all of this tenor and date, and wherever one original Bill of Lading has been surrendered all other Bills of Lading shall be void.'
+  ];
+  
+  for (const legalText of legalTexts) {
+    if (yPosition < 100) {
+      // Create new page if running out of space
+      currentPage = pdfDoc.addPage(PageSizes.A4);
+      pageNumber++;
+      yPosition = createContinuationHeader(currentPage, pageNumber);
+      yPosition -= 20;
+    }
+    
+    const textHeight = drawText(currentPage, legalText, 30, yPosition - 10, {
       size: 7,
       font: helvetica,
-      color: borderGray,
+      color: black,
       maxWidth: width - 60,
-      align: 'center'
+      lineHeight: 9,
+      maxLines: 10
     });
+    
+    yPosition = textHeight - 15;
+  }
+  
+  // === IMPORTANT NOTICES ===
+  yPosition -= 10;
+  
+  const importantNotices = [
+    '"Carrier\'s liability ceases after discharge of goods into Customs custody and Carrier shall not be responsible for delivery of cargo without the presentation of the Original Bill of Lading, as per Customs Regulations".',
+    
+    'CARRIER WILL NOT BE LIABLE FOR ANY MISDECLARATION OF H.S.CODE/NCM AND ALL COSTS AND CONSEQUENCES ARISING OUT OF THE MISDECLARATION WILL BE ON ACCOUNT OF SHIPPERS.',
+    
+    'Cargo shall not be delivered unless Freight & Charges are paid',
+    
+    'AS PER AGREEMENT'
+  ];
+  
+  for (const notice of importantNotices) {
+    if (yPosition < 50) {
+      currentPage = pdfDoc.addPage(PageSizes.A4);
+      pageNumber++;
+      yPosition = createContinuationHeader(currentPage, pageNumber);
+      yPosition -= 20;
+    }
+    
+    const textHeight = drawText(currentPage, notice, 30, yPosition - 10, {
+      size: 7,
+      font: helveticaBold,
+      color: black,
+      maxWidth: width - 60,
+      lineHeight: 9,
+      maxLines: 3
+    });
+    
+    yPosition = textHeight - 10;
+  }
+  
+  // === SIGNATURE AND ENDORSEMENT SECTIONS ===
+  yPosition -= 20;
+  
+  if (yPosition < 120) {
+    currentPage = pdfDoc.addPage(PageSizes.A4);
+    pageNumber++;
+    yPosition = createContinuationHeader(currentPage, pageNumber);
+    yPosition -= 20;
+  }
+  
+  // Carrier's Agent Endorsements
+  currentPage.drawText('CARRIER\'S AGENTS ENDORSEMENTS:', {
+    x: 30,
+    y: yPosition - 10,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  
+  drawBox(currentPage, 30, yPosition - 40, width - 60, 25, {
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  drawText(currentPage, bolData.carrier_endorsements || '', 35, yPosition - 30, {
+    size: 8,
+    font: helvetica,
+    color: black,
+    maxWidth: width - 70,
+    maxLines: 2
+  });
+  
+  yPosition -= 50;
+  
+  // Number & Sequence of Original B/Ls
+  currentPage.drawText('NO.& SEQUENCE OF ORIGINAL B/L\'s', {
+    x: 30,
+    y: yPosition - 10,
+    size: 10,
+    font: helveticaBold,
+    color: black
+  });
+  
+  drawBox(currentPage, 30, yPosition - 35, width - 60, 20, {
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  drawText(currentPage, bolData.bl_sequence || '3 (Three) Original Bills of Lading', 35, yPosition - 25, {
+    size: 8,
+    font: helvetica,
+    color: black,
+    maxWidth: width - 70
+  });
+  
+  yPosition -= 45;
+  
+  // Terms continued on reverse notice
+  currentPage.drawText('TERMS CONTINUED ON REVERSE', {
+    x: 30,
+    y: yPosition - 10,
+    size: 8,
+    font: helveticaBold,
+    color: black
+  });
+  
+  yPosition -= 25;
+  
+  // Final signature section
+  drawBox(currentPage, 30, yPosition - 40, (width - 60) / 2, 40, {
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  currentPage.drawText('PLACE AND DATE OF ISSUE', {
+    x: 35,
+    y: yPosition - 15,
+    size: 8,
+    font: helveticaBold,
+    color: black
+  });
+  
+  drawText(currentPage, bolData.place_and_date_of_issue || currentDate, 35, yPosition - 30, {
+    size: 8,
+    font: helvetica,
+    color: black,
+    maxWidth: (width - 70) / 2
+  });
+  
+  drawBox(currentPage, 40 + (width - 60) / 2, yPosition - 40, (width - 60) / 2 - 20, 40, {
+    borderColor: black,
+    borderWidth: 1
+  });
+  
+  currentPage.drawText('SHIPPED ON BOARD DATE', {
+    x: 45 + (width - 60) / 2,
+    y: yPosition - 15,
+    size: 8,
+    font: helveticaBold,
+    color: black
+  });
+  
+  drawText(currentPage, bolData.shipped_on_board_date || currentDate, 45 + (width - 60) / 2, yPosition - 30, {
+    size: 8,
+    font: helvetica,
+    color: black,
+    maxWidth: (width - 80) / 2
+  });
+  
+  yPosition -= 50;
+  
+  // Final signature line
+  currentPage.drawText(`SIGNED ${bolData.signed_by || '_________________________'} on behalf of the Carrier`, {
+    x: 30,
+    y: yPosition - 10,
+    size: 9,
+    font: helvetica,
+    color: black
+  });
+  
+  // Calculate total rider pages (all pages except the first one)
+  const totalPages = pdfDoc.getPageCount();
+  const riderPagesCount = Math.max(0, totalPages - 1);
+  
+  // Update the rider pages field on the first page if there are rider pages
+  if (riderPagesCount > 0) {
+    const firstPage = pdfDoc.getPage(0);
+    // Add or update the rider pages count on the first page
+    // Note: This would ideally be calculated before PDF generation starts
+    // but we're calculating it here for now
   }
   
   // Save and return the PDF

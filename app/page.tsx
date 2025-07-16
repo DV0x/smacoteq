@@ -10,6 +10,7 @@ export default function Home() {
   const [invoice, setInvoice] = useState<File | null>(null);
   const [combinedDocument, setCombinedDocument] = useState<File | null>(null);
   const [bolNumber, setBolNumber] = useState<string>('');
+  const [bookingNumber, setBookingNumber] = useState<string>('');
   const [status, setStatus] = useState<ProcessingStatusType>('idle');
   const [error, setError] = useState<string>('');
   
@@ -22,12 +23,27 @@ export default function Home() {
     return bolRegex.test(bolNum.trim());
   };
 
+  // Function to validate Booking number format
+  const validateBookingNumber = (bookingNum: string): boolean => {
+    if (!bookingNum.trim()) return true; // Empty is allowed
+    
+    // Booking number validation: alphanumeric, hyphens, underscores, 3-50 characters
+    const bookingRegex = /^[A-Za-z0-9\-_]{3,50}$/;
+    return bookingRegex.test(bookingNum.trim());
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate BOL number format if provided
     if (bolNumber.trim() && !validateBolNumber(bolNumber)) {
       setError('BOL number must be 3-50 characters and contain only letters, numbers, hyphens, and underscores');
+      return;
+    }
+    
+    // Validate Booking number format if provided
+    if (bookingNumber.trim() && !validateBookingNumber(bookingNumber)) {
+      setError('Booking number must be 3-50 characters and contain only letters, numbers, hyphens, and underscores');
       return;
     }
     
@@ -53,6 +69,11 @@ export default function Home() {
     // Add BOL number if provided
     if (bolNumber.trim()) {
       formData.append('bolNumber', bolNumber.trim());
+    }
+    
+    // Add Booking number if provided
+    if (bookingNumber.trim()) {
+      formData.append('bookingNumber', bookingNumber.trim());
     }
     
     if (uploadMode === 'separate') {
@@ -98,6 +119,7 @@ export default function Home() {
         setInvoice(null);
         setCombinedDocument(null);
         setBolNumber('');
+        setBookingNumber('');
       }, 3000);
       
     } catch (err) {
@@ -311,6 +333,58 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               If not provided, a unique BOL number will be automatically generated
+            </p>
+          </div>
+
+          {/* Booking Number Input */}
+          <div className="mb-8">
+            <label htmlFor="bookingNumber" className="flex items-center text-base font-semibold text-gray-900 mb-4">
+              <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-md flex items-center justify-center mr-3">
+                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+              </div>
+              Booking Confirmation Number
+              <span className="ml-2 text-sm font-normal text-gray-500">(Optional)</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                id="bookingNumber"
+                name="bookingNumber"
+                value={bookingNumber}
+                onChange={(e) => setBookingNumber(e.target.value)}
+                placeholder="Enter booking number (e.g., BOOK-2024-001)"
+                className={`w-full px-4 py-3 border-2 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 ${
+                  bookingNumber.trim() && !validateBookingNumber(bookingNumber) 
+                    ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500/20' 
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+                maxLength={50}
+              />
+              {bookingNumber.trim() && validateBookingNumber(bookingNumber) && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+            </div>
+            {bookingNumber.trim() && !validateBookingNumber(bookingNumber) && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700 flex items-center">
+                  <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  Booking number must be 3-50 characters and contain only letters, numbers, hyphens, and underscores
+                </p>
+              </div>
+            )}
+            <p className="mt-3 text-sm text-gray-600 flex items-center">
+              <svg className="w-4 h-4 mr-2 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Reference number for booking confirmation and tracking
             </p>
           </div>
 

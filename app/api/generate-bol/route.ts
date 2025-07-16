@@ -118,9 +118,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Get upload mode and BOL number
+    // Get upload mode, BOL number, and booking number
     const uploadMode = formData.get('uploadMode') as string;
     const customBolNumber = formData.get('bolNumber') as string | null;
+    const customBookingNumber = formData.get('bookingNumber') as string | null;
     
     let packingList: File | null = null;
     let invoice: File | null = null;
@@ -216,70 +217,6 @@ export async function POST(request: NextRequest) {
       // Debug: Log what we got from LLM
       console.log('LLM Response:', JSON.stringify(bolData, null, 2));
       
-      // Handle case where LLM returns nested structure
-      if (bolData && typeof bolData === 'object' && 'BillOfLading' in bolData) {
-        console.log('Detected nested BillOfLading structure, extracting and mapping...');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const nestedData = (bolData as { BillOfLading: Record<string, any> }).BillOfLading;
-        
-        // Map the nested structure to our expected format
-        bolData = {
-          shipper: {
-            name: nestedData.Exporter?.Name || '',
-            address: nestedData.Exporter?.Address?.split(',')[0] || '',
-            city: nestedData.Exporter?.Address?.split(',').slice(1).join(',').trim() || '',
-            country: 'India',
-            phone: nestedData.Exporter?.Phone || undefined
-          },
-          consignee: {
-            name: nestedData.Consignee?.Name || '',
-            address: nestedData.Consignee?.Address?.split(',')[0] || '',
-            city: nestedData.Consignee?.Address?.split(',').slice(1).join(',').trim() || '',
-            country: nestedData.Consignee?.Country || 'Netherlands',
-            phone: nestedData.Consignee?.Phone || undefined
-          },
-          notify_party: nestedData.NotifyParty ? {
-            name: nestedData.NotifyParty.Name || '',
-            address: nestedData.NotifyParty.Address || ''
-          } : undefined,
-          vessel_details: {
-            vessel_name: nestedData.VesselAndShippingLine?.VesselName || 'TBN',
-            voyage_number: nestedData.VesselAndShippingLine?.VoyageNumber || 'TBN'
-          },
-          ports: {
-            loading: nestedData.ShipmentDetails?.PortOfLoading || '',
-            discharge: nestedData.ShipmentDetails?.PortOfDischarge || '',
-            delivery: nestedData.ShipmentDetails?.CountryOfDestination || ''
-          },
-          cargo: nestedData.CargoDescription?.map((item: { ItemDescription?: string; HSNCode?: string; NumberOfBags?: number; NetWeightKgs?: number; Volume?: string }) => ({
-            description: item.ItemDescription || '',
-            hs_code: item.HSNCode || '',
-            quantity: item.NumberOfBags || 0,
-            unit: 'bags',
-            weight: `${item.NetWeightKgs || 0} kg`,
-            volume: item.Volume || ''
-          })) || [],
-          totals: {
-            packages: nestedData.TotalBags || 0,
-            gross_weight: `${nestedData.TotalGrossWeightKgs || 0} kg`,
-            measurement: nestedData.TotalMeasurement || ''
-          },
-          invoice_details: {
-            number: nestedData.Exporter?.InvoiceNoAndDate?.split(' ')[0] || '',
-            date: nestedData.Exporter?.InvoiceNoAndDate?.split(' dt ')[1] || '',
-            value: nestedData.InvoiceValue || '',
-            currency: nestedData.Currency || 'USD'
-          },
-          freight_terms: nestedData.FreightAndPaymentTerms?.TermsOfDelivery || '',
-          payment_terms: nestedData.FreightAndPaymentTerms?.TermsOfPayment || '',
-          special_instructions: Array.isArray(nestedData.SpecialInstructions) 
-            ? nestedData.SpecialInstructions.join(', ') 
-            : nestedData.SpecialInstructions || '',
-          date_of_shipment: nestedData.DateOfShipment || ''
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any;
-      }
-      
       // Validate that we got valid BOL data
       if (!bolData || typeof bolData !== 'object') {
         throw new Error('Invalid BOL data structure returned');
@@ -318,7 +255,7 @@ export async function POST(request: NextRequest) {
     let pdfBytes: Uint8Array;
     
     try {
-      pdfBytes = await generateBOLPDF(bolData, customBolNumber);
+      pdfBytes = await generateBOLPDF(bolData, customBolNumber, customBookingNumber);
       
       // Validate PDF was generated
       if (!pdfBytes || pdfBytes.length === 0) {
