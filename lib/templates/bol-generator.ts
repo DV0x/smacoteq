@@ -20,6 +20,7 @@ export function generateBOLHTML(
     ${generateDocumentTracking(bolData)}
     ${generatePartiesSection(bolData)}
     ${generateTransportDetails(bolData, customBookingNumber)}
+    ${bolData.has_dangerous_goods ? generateDangerousGoodsSection(bolData) : ''}
     ${generateCargoDisclaimer()}
     ${generateCargoTable(bolData)}
     ${generateTotalsSection(bolData)}
@@ -423,6 +424,115 @@ function getHTMLTemplate(): string {
       font-size: 10px;
     }
     
+    .dangerous-goods-section {
+      margin: 15px 0;
+      padding: 12px;
+      border: 2px solid #ff0000;
+      background-color: #fff5f5;
+    }
+    
+    .dg-warning {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      padding: 8px;
+      background-color: #ff0000;
+      color: white;
+    }
+    
+    .warning-icon {
+      width: 24px;
+      height: 24px;
+      margin-right: 8px;
+    }
+    
+    .warning-text {
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    
+    .dg-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    
+    .dg-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px;
+      background-color: #ffffff;
+      border: 1px solid #ff9999;
+    }
+    
+    .dg-label {
+      font-weight: bold;
+      font-size: 10px;
+      color: #cc0000;
+    }
+    
+    .dg-value {
+      font-size: 10px;
+      font-weight: 600;
+    }
+    
+    .dg-value-large {
+      font-size: 11px;
+      font-weight: bold;
+      color: #000;
+    }
+    
+    .dg-value-bold {
+      font-size: 11px;
+      font-weight: bold;
+      color: #cc0000;
+    }
+    
+    .dg-shipping-name {
+      margin: 10px 0;
+      padding: 8px;
+      background-color: #ffffff;
+      border: 1px solid #ff9999;
+    }
+    
+    .dg-emergency {
+      margin-top: 10px;
+      padding: 8px;
+      background-color: #ffcc00;
+      border: 1px solid #ff9900;
+      text-align: center;
+    }
+    
+    .dg-provisions {
+      margin-top: 8px;
+      padding: 6px;
+      font-size: 9px;
+      border-top: 1px solid #ff9999;
+    }
+    
+    .dg-entry-header {
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    
+    .dg-entry-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: #cc0000;
+      background-color: #ffffff;
+      padding: 4px 8px;
+      border: 1px solid #ff9999;
+    }
+    
+    .dg-count {
+      font-size: 12px;
+      font-weight: normal;
+      margin-left: 10px;
+    }
+    
     @media print {
       .bol-container {
         padding: 0;
@@ -749,6 +859,96 @@ function generateDateSection(bolData: BOLData, currentDate: string): string {
         <div class="date-label">SHIPPED ON BOARD DATE</div>
         <div class="date-value">${bolData.shipped_on_board_date || currentDate}</div>
       </div>
+    </div>
+  `;
+}
+
+function generateDangerousGoodsSection(bolData: BOLData): string {
+  if (!bolData.has_dangerous_goods || !bolData.dangerous_goods || bolData.dangerous_goods.length === 0) {
+    return '';
+  }
+
+  const dgEntries = bolData.dangerous_goods;
+  
+  // Generate individual dangerous goods entries
+  const dgItems = dgEntries.map((dg, index) => `
+    <div class="dg-entry" ${index > 0 ? 'style="margin-top: 15px; border-top: 1px solid #ff9999; padding-top: 10px;"' : ''}>
+      <div class="dg-entry-header">
+        <span class="dg-entry-title">Entry ${index + 1} of ${dgEntries.length}</span>
+      </div>
+      
+      <div class="dg-grid">
+        <div class="dg-item">
+          <span class="dg-label">UN Number:</span>
+          <span class="dg-value">${dg.un_number || 'N/A'}</span>
+        </div>
+        <div class="dg-item">
+          <span class="dg-label">Class:</span>
+          <span class="dg-value">${dg.hazard_class || 'N/A'}</span>
+        </div>
+        <div class="dg-item">
+          <span class="dg-label">Packing Group:</span>
+          <span class="dg-value">${dg.packing_group || 'N/A'}</span>
+        </div>
+        <div class="dg-item">
+          <span class="dg-label">Marine Pollutant:</span>
+          <span class="dg-value">${dg.marine_pollutant ? 'YES - P' : 'NO'}</span>
+        </div>
+      </div>
+      
+      <div class="dg-shipping-name">
+        <span class="dg-label">Proper Shipping Name:</span>
+        <span class="dg-value-large">${dg.proper_shipping_name || 'N/A'}</span>
+      </div>
+      
+      ${dg.subsidiary_risk && dg.subsidiary_risk !== 'NA' ? `
+        <div class="dg-item">
+          <span class="dg-label">Subsidiary Risk:</span>
+          <span class="dg-value">${dg.subsidiary_risk}</span>
+        </div>
+      ` : ''}
+      
+      ${dg.flash_point && dg.flash_point !== 'NA' ? `
+        <div class="dg-item">
+          <span class="dg-label">Flash Point:</span>
+          <span class="dg-value">${dg.flash_point}</span>
+        </div>
+      ` : ''}
+      
+      ${dg.ems_number ? `
+        <div class="dg-item">
+          <span class="dg-label">EMS Number:</span>
+          <span class="dg-value">${dg.ems_number}</span>
+        </div>
+      ` : ''}
+      
+      ${dg.emergency_contact ? `
+        <div class="dg-emergency">
+          <span class="dg-label">24/7 Emergency Contact:</span>
+          <span class="dg-value-bold">${dg.emergency_contact}</span>
+        </div>
+      ` : ''}
+      
+      ${dg.special_provisions ? `
+        <div class="dg-provisions">
+          <span class="dg-label">Special Provisions:</span>
+          <span class="dg-value">${dg.special_provisions}</span>
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+  
+  return `
+    <div class="dangerous-goods-section">
+      <div class="dg-warning">
+        <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span class="warning-text">DANGEROUS GOODS DECLARATION</span>
+        <span class="dg-count">(${dgEntries.length} ${dgEntries.length === 1 ? 'Entry' : 'Entries'})</span>
+      </div>
+      
+      ${dgItems}
     </div>
   `;
 }

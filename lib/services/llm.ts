@@ -5,6 +5,177 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY! 
 });
 
+export async function generateBOLWithDangerousGoods(
+  packingListText: string,
+  invoiceText: string,
+  dangerousGoodsText: string
+): Promise<BOLData> {
+  const systemPrompt = `You are an expert shipping document processor specializing in Bills of Lading for ocean freight, with expertise in dangerous goods regulations. 
+Your task is to extract and organize information from shipping documents including dangerous goods declarations into a structured JSON format for generating a professional Bill of Lading.
+
+CRITICAL REQUIREMENTS:
+1. Return ONLY a valid JSON object - no markdown, no explanations, no additional text
+2. Use the EXACT field names and structure specified in the instructions
+3. Extract ALL relevant information systematically from all three documents
+4. Pay special attention to dangerous goods information - this is critical for safety and compliance
+5. Cross-reference information between documents for accuracy and completeness
+6. Use standard shipping industry terminology and formatting`;
+
+  const userPrompt = `Extract and organize information from these shipping documents to create a comprehensive Bill of Lading with dangerous goods information.
+
+PACKING LIST:
+${packingListText}
+
+COMMERCIAL INVOICE:
+${invoiceText}
+
+DANGEROUS GOODS DECLARATION:
+${dangerousGoodsText}
+
+EXTRACTION GUIDELINES:
+- Use exporter/seller as shipper, buyer/consignee as consignee
+- Extract container numbers, seal numbers, and shipping marks from any document
+- Identify all reference numbers (booking, shipper's reference, etc.)
+- Find port information, vessel details, and shipping dates
+- Calculate accurate totals for packages, weights, and measurements
+- Extract commercial terms (freight, payment, incoterms)
+- Look for special instructions, handling requirements, or shipping marks
+
+CRITICAL CARGO EXTRACTION RULES:
+- MAINTAIN EACH PRODUCT/ITEM AS A SEPARATE CARGO ENTRY
+- DO NOT consolidate different products into a single cargo item
+- Each distinct product with different marks/descriptions should be a separate array item
+- Preserve individual weights, descriptions, and marks for each product line
+- The cargo array should contain multiple objects, one for each distinct product/batch
+
+DANGEROUS GOODS EXTRACTION (CRITICAL):
+- UN Number (e.g., UN 1234)
+- Proper Shipping Name (exact name from declaration)
+- Hazard Class (1-9, may include sub-class like 2.1)
+- Packing Group (I, II, or III)
+- Marine Pollutant (Yes/No or P for pollutant)
+- Subsidiary Risk (if applicable)
+- Flash Point (for Class 3 flammable liquids)
+- Emergency Contact (24/7 contact number)
+- Special Provisions or handling instructions
+- Limited Quantity indication
+- EMS Number (Emergency Schedule)
+- Segregation requirements
+
+Return a JSON object with this EXACT structure:
+
+{
+  "shipper": {
+    "name": "full company name",
+    "address": "street address",
+    "city": "city, state/province, postal code",
+    "country": "country name",
+    "phone": "phone number if available"
+  },
+  "consignee": {
+    "name": "full company name",
+    "address": "street address",
+    "city": "city, state/province, postal code",
+    "country": "country name",
+    "phone": "phone number if available",
+    "is_negotiable": false
+  },
+  "notify_party": {
+    "name": "company name if different from consignee",
+    "address": "full address",
+    "phone": "phone number"
+  },
+  "booking_ref": "booking reference number",
+  "shipper_ref": "shipper's reference number",
+  "vessel_details": {
+    "vessel_name": "vessel name or TBN",
+    "voyage_number": "voyage number or TBN"
+  },
+  "ports": {
+    "loading": "port of loading",
+    "discharge": "port of discharge",
+    "delivery": "final delivery location"
+  },
+  "cargo": [
+    {
+      "container_numbers": "container numbers",
+      "seal_numbers": "seal numbers",
+      "marks": "shipping marks and numbers",
+      "description": "detailed description of goods INCLUDING dangerous goods classification",
+      "gross_weight": "weight with unit",
+      "measurement": "volume/measurement"
+    }
+  ],
+  "totals": {
+    "packages": 0,
+    "gross_weight": "total weight with unit",
+    "measurement": "total volume/CBM"
+  },
+  "dangerous_goods": [
+    {
+      "un_number": "UN followed by 4 digits",
+      "proper_shipping_name": "exact shipping name from declaration",
+      "hazard_class": "primary hazard class",
+      "packing_group": "I, II, or III",
+      "marine_pollutant": true/false,
+      "subsidiary_risk": "secondary hazard if applicable",
+      "flash_point": "temperature if applicable",
+      "emergency_contact": "24/7 emergency phone",
+      "special_provisions": "any special handling requirements",
+      "limited_quantity": true/false,
+      "ems_number": "F-X, S-X format",
+      "segregation_group": "segregation requirements"
+    }
+  ],
+  "has_dangerous_goods": true,
+  "freight_charges": "freight amount or terms",
+  "invoice_details": {
+    "number": "invoice number",
+    "date": "invoice date",
+    "value": "total value",
+    "currency": "currency code"
+  },
+  "freight_terms": "FOB/CIF/etc",
+  "special_instructions": "Include DANGEROUS GOODS warning and handling instructions"
+}
+
+Return only the JSON object with extracted data.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1-mini-2025-04-14",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 4096
+    });
+    
+    const content = response.choices[0].message.content;
+    if (!content) throw new Error('No response from LLM');
+    
+    const bolData = JSON.parse(content) as BOLData;
+    
+    // Ensure dangerous goods flag is set and normalize format
+    if (bolData.dangerous_goods) {
+      bolData.has_dangerous_goods = true;
+      
+      // Handle case where LLM returns single object instead of array
+      if (!Array.isArray(bolData.dangerous_goods)) {
+        bolData.dangerous_goods = [bolData.dangerous_goods as any];
+        console.log('Normalized dangerous_goods from object to array');
+      }
+    }
+    
+    return bolData;
+  } catch (error) {
+    console.error('LLM processing failed for dangerous goods:', error);
+    throw new Error('Failed to generate BOL data with dangerous goods information');
+  }
+}
+
 export async function generateBOL(
   packingListText: string, 
   invoiceText: string

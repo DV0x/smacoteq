@@ -85,8 +85,8 @@ export interface BOLData {
   special_instructions?: string;
   date_of_shipment?: string;
   
-  // Dangerous Goods Information
-  dangerous_goods?: {
+  // Dangerous Goods Information - Support multiple entries
+  dangerous_goods?: Array<{
     un_number: string;
     proper_shipping_name: string;
     hazard_class: string;
@@ -99,7 +99,7 @@ export interface BOLData {
     limited_quantity?: boolean;
     ems_number?: string; // Emergency Schedule Number
     segregation_group?: string;
-  };
+  }>;
   
   // Flag to indicate if shipment contains dangerous goods
   has_dangerous_goods?: boolean;

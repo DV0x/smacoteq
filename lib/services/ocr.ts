@@ -68,6 +68,36 @@ export async function extractFromMultipleDocuments(
   return Promise.all(files.map(file => extractTextFromDocument(file)));
 }
 
+export async function extractFromDangerousGoodsDocuments(
+  packingList: File,
+  invoice: File,
+  dangerousGoods: File
+): Promise<{
+  packingList: string;
+  invoice: string;
+  dangerousGoods: string;
+}> {
+  try {
+    // Process all three documents in parallel for efficiency
+    const [packingListText, invoiceText, dangerousGoodsText] = await Promise.all([
+      extractTextFromDocument(packingList),
+      extractTextFromDocument(invoice),
+      extractTextFromDocument(dangerousGoods)
+    ]);
+    
+    console.log('Successfully extracted text from all dangerous goods documents');
+    
+    return {
+      packingList: packingListText,
+      invoice: invoiceText,
+      dangerousGoods: dangerousGoodsText
+    };
+  } catch (error) {
+    console.error('Failed to extract text from dangerous goods documents:', error);
+    throw new Error('OCR processing failed for dangerous goods documents');
+  }
+}
+
 export async function extractFromCombinedDocument(
   file: File
 ): Promise<{ packingListText: string; invoiceText: string }> {

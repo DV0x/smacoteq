@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractTextFromDocument, extractFromCombinedDocument } from '@/lib/services/ocr';
-import { generateBOL } from '@/lib/services/llm';
+import { 
+  extractTextFromDocument, 
+  extractFromCombinedDocument,
+  extractFromDangerousGoodsDocuments 
+} from '@/lib/services/ocr';
+import { 
+  generateBOL,
+  generateBOLWithDangerousGoods 
+} from '@/lib/services/llm';
 import { generateBOLPDF } from '@/lib/services/pdf';
 import { validateFile } from '@/lib/utils/file-helpers';
 
@@ -126,11 +133,21 @@ export async function POST(request: NextRequest) {
     let packingList: File | null = null;
     let invoice: File | null = null;
     let combinedDocument: File | null = null;
+    let dangerousGoodsDoc: File | null = null;
     
     if (uploadMode === 'combined') {
       // Extract and validate combined document
       combinedDocument = formData.get('combinedDocument') as File;
       await validateUploadedFile(combinedDocument, 'Combined Document');
+    } else if (uploadMode === 'dangerous') {
+      // Extract and validate all three files for dangerous goods
+      packingList = formData.get('packingList') as File;
+      invoice = formData.get('invoice') as File;
+      dangerousGoodsDoc = formData.get('dangerousGoods') as File;
+      
+      await validateUploadedFile(packingList, 'Packing List');
+      await validateUploadedFile(invoice, 'Commercial Invoice');
+      await validateUploadedFile(dangerousGoodsDoc, 'Dangerous Goods Declaration');
     } else {
       // Extract and validate separate files (default behavior)
       packingList = formData.get('packingList') as File;
@@ -150,6 +167,8 @@ export async function POST(request: NextRequest) {
       invoiceType: invoice?.type,
       combinedDocumentSize: combinedDocument?.size,
       combinedDocumentType: combinedDocument?.type,
+      dangerousGoodsSize: dangerousGoodsDoc?.size,
+      dangerousGoodsType: dangerousGoodsDoc?.type,
       timestamp: new Date().toISOString(),
       userAgent: request.headers.get('user-agent')?.substring(0, 100)
     });
@@ -158,6 +177,7 @@ export async function POST(request: NextRequest) {
     console.log('Step 1: Extracting text from documents...');
     let packingListText: string;
     let invoiceText: string;
+    let dangerousGoodsText: string = '';
     
     try {
       if (uploadMode === 'combined' && combinedDocument) {
@@ -165,6 +185,16 @@ export async function POST(request: NextRequest) {
         const combinedResult = await extractFromCombinedDocument(combinedDocument);
         packingListText = combinedResult.packingListText;
         invoiceText = combinedResult.invoiceText;
+      } else if (uploadMode === 'dangerous' && packingList && invoice && dangerousGoodsDoc) {
+        console.log('Processing dangerous goods documents...');
+        const extractedTexts = await extractFromDangerousGoodsDocuments(
+          packingList,
+          invoice,
+          dangerousGoodsDoc
+        );
+        packingListText = extractedTexts.packingList;
+        invoiceText = extractedTexts.invoice;
+        dangerousGoodsText = extractedTexts.dangerousGoods;
       } else if (packingList && invoice) {
         console.log('Processing separate documents...');
         const [packingListResult, invoiceResult] = await Promise.all([
@@ -189,12 +219,16 @@ export async function POST(request: NextRequest) {
       
       console.log('OCR extraction successful', {
         packingListLength: packingListText.length,
-        invoiceLength: invoiceText.length
+        invoiceLength: invoiceText.length,
+        dangerousGoodsLength: dangerousGoodsText.length
       });
       
       // Debug: Log first 500 chars of each document
       console.log('Packing List Preview:', packingListText.substring(0, 500) + '...');
       console.log('Invoice Preview:', invoiceText.substring(0, 500) + '...');
+      if (dangerousGoodsText) {
+        console.log('Dangerous Goods Preview:', dangerousGoodsText.substring(0, 500) + '...');
+      }
       
     } catch (error) {
       console.error('OCR extraction failed:', error);
@@ -212,7 +246,9 @@ export async function POST(request: NextRequest) {
     let bolData;
     
     try {
-      bolData = await generateBOL(packingListText, invoiceText);
+      bolData = uploadMode === 'dangerous' 
+        ? await generateBOLWithDangerousGoods(packingListText, invoiceText, dangerousGoodsText)
+        : await generateBOL(packingListText, invoiceText);
       
       // Debug: Log what we got from LLM
       console.log('LLM Response:', JSON.stringify(bolData, null, 2));
