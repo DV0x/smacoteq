@@ -9,6 +9,10 @@ export async function generateBOL(
   packingListText: string, 
   invoiceText: string
 ): Promise<BOLData> {
+  // Debug logging for input text analysis
+  console.log('OCR Input - Packing list length:', packingListText.length);
+  console.log('OCR Input - Invoice length:', invoiceText.length);
+  console.log('OCR Input - Packing list preview:', packingListText.substring(0, 200));
   const systemPrompt = `You are an expert shipping document processor specializing in Bills of Lading for ocean freight. 
 Your task is to extract and organize information from shipping documents into a structured JSON format for generating a professional Bill of Lading.
 
@@ -35,6 +39,13 @@ EXTRACTION GUIDELINES:
 - Calculate accurate totals for packages, weights, and measurements
 - Extract commercial terms (freight, payment, incoterms)
 - Look for special instructions, handling requirements, or shipping marks
+
+CRITICAL CARGO EXTRACTION RULES:
+- MAINTAIN EACH PRODUCT/ITEM AS A SEPARATE CARGO ENTRY
+- DO NOT consolidate different products into a single cargo item
+- Each distinct product with different marks/descriptions should be a separate array item
+- Preserve individual weights, descriptions, and marks for each product line
+- The cargo array should contain multiple objects, one for each distinct product/batch
 
 Return a JSON object with this EXACT structure (all fields are optional unless marked required):
 
@@ -82,10 +93,18 @@ Return a JSON object with this EXACT structure (all fields are optional unless m
     {
       "container_numbers": "container numbers if available",
       "seal_numbers": "seal numbers if available", 
-      "marks": "shipping marks and numbers",
-      "description": "detailed description of goods",
-      "gross_weight": "weight with unit (kg/lbs)",
-      "measurement": "volume/measurement if available"
+      "marks": "specific marks for this item (e.g., 01-200 Boxes)",
+      "description": "detailed description of this specific product",
+      "gross_weight": "weight with unit for this item only",
+      "measurement": "volume/measurement for this item if available"
+    },
+    {
+      "container_numbers": "same or different container",
+      "seal_numbers": "seal numbers if different", 
+      "marks": "marks for second item (e.g., 201-400 Boxes)",
+      "description": "description of second product",
+      "gross_weight": "weight for second item",
+      "measurement": "measurement for second item"
     }
   ],
   "totals": {
@@ -134,14 +153,24 @@ EXAMPLE OUTPUT FORMAT:
   },
   "cargo": [
     {
-      "marks": "CTNS 1-100",
-      "description": "Machine Parts",
-      "gross_weight": "1000 kg"
+      "marks": "01-200 Boxes",
+      "description": "Alpha Cypermethrin 10% EC HS Code: 38089199 200 Boxes 100 x 100 ml. Normal Al Bottle",
+      "gross_weight": "2000 kg"
+    },
+    {
+      "marks": "201-400 Boxes", 
+      "description": "Alpha Cypermethrin 10% EC HS Code: 38089199 200 Boxes 40 x 250 ml. Normal Al Bottle",
+      "gross_weight": "2000 kg"
+    },
+    {
+      "marks": "401-450 Boxes",
+      "description": "Azoxystrobin 18.2% + Difenoconazole 11.4% SC HS Code: 38089290 50 Boxes 40 x 250 ml. Co-Ex Bottle", 
+      "gross_weight": "500 kg"
     }
   ],
   "totals": {
-    "packages": 100,
-    "gross_weight": "1000 kg"
+    "packages": 450,
+    "gross_weight": "4500 kg"
   },
   "freight_terms": "FOB"
 }
@@ -163,7 +192,19 @@ Return only the JSON object with extracted data.`;
     const content = response.choices[0].message.content;
     if (!content) throw new Error('No response from LLM');
     
-    return JSON.parse(content) as BOLData;
+    const bolData = JSON.parse(content) as BOLData;
+    
+    // Debug logging for both environments to diagnose production issues
+    console.log('LLM Response - Cargo items count:', bolData.cargo?.length || 0);
+    console.log('LLM Response - Total packages:', bolData.totals?.packages || 0);
+    console.log('LLM Response - First cargo item marks:', bolData.cargo?.[0]?.marks || 'NONE');
+    
+    // Log the full LLM response in development for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Full LLM Response:', JSON.stringify(bolData, null, 2));
+    }
+    
+    return bolData;
   } catch (error) {
     console.error('LLM processing failed:', error);
     throw new Error('Failed to generate BOL data');
