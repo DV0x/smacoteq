@@ -47,6 +47,8 @@ CRITICAL CARGO EXTRACTION RULES:
 - Each distinct product with different marks/descriptions should be a separate array item
 - Preserve individual weights, descriptions, and marks for each product line
 - The cargo array should contain multiple objects, one for each distinct product/batch
+- EXCLUDE dangerous goods details (UN numbers, hazard classes, proper shipping names) from cargo descriptions
+- Use only commercial product names, HS codes, and package information in cargo descriptions
 
 DANGEROUS GOODS EXTRACTION (CRITICAL):
 - UN Number (e.g., UN 1234)
@@ -101,7 +103,7 @@ Return a JSON object with this EXACT structure:
       "container_numbers": "container numbers",
       "seal_numbers": "seal numbers",
       "marks": "shipping marks and numbers",
-      "description": "detailed description of goods INCLUDING dangerous goods classification",
+      "description": "commercial description with HS codes and package details (exclude dangerous goods details)",
       "gross_weight": "weight with unit",
       "measurement": "volume/measurement"
     }
@@ -217,6 +219,8 @@ CRITICAL CARGO EXTRACTION RULES:
 - Each distinct product with different marks/descriptions should be a separate array item
 - Preserve individual weights, descriptions, and marks for each product line
 - The cargo array should contain multiple objects, one for each distinct product/batch
+- EXCLUDE dangerous goods details (UN numbers, hazard classes, proper shipping names) from cargo descriptions
+- Use only commercial product names, HS codes, and package information in cargo descriptions
 
 Return a JSON object with this EXACT structure (all fields are optional unless marked required):
 
@@ -265,7 +269,7 @@ Return a JSON object with this EXACT structure (all fields are optional unless m
       "container_numbers": "container numbers if available",
       "seal_numbers": "seal numbers if available", 
       "marks": "specific marks for this item (e.g., 01-200 Boxes)",
-      "description": "detailed description of this specific product",
+      "description": "commercial description with HS codes and package details (exclude dangerous goods info)",
       "gross_weight": "weight with unit for this item only",
       "measurement": "volume/measurement for this item if available"
     },
@@ -273,7 +277,7 @@ Return a JSON object with this EXACT structure (all fields are optional unless m
       "container_numbers": "same or different container",
       "seal_numbers": "seal numbers if different", 
       "marks": "marks for second item (e.g., 201-400 Boxes)",
-      "description": "description of second product",
+      "description": "commercial description with HS codes and package details (exclude dangerous goods info)",
       "gross_weight": "weight for second item",
       "measurement": "measurement for second item"
     }
