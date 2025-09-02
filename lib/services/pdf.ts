@@ -17,9 +17,6 @@ export async function generateBOLPDF(
       const puppeteer = await import('puppeteer-core');
       const chromium = await import('@sparticuz/chromium');
       
-      // Optional: Load fonts for better rendering
-      chromium.default.font('https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf');
-      
       browser = await puppeteer.default.launch({
         args: chromium.default.args,
         defaultViewport: { width: 1920, height: 1080 },
@@ -39,9 +36,17 @@ export async function generateBOLPDF(
     const page = await browser.newPage();
     const html = generateBOLHTML(bolData, customBolNumber, customBookingNumber);
     
+    // Debug: Log first 500 chars of generated HTML in development
+    if (!isVercel) {
+      console.log('Generated HTML preview:', html.substring(0, 500));
+    }
+    
     await page.setContent(html, {
-      waitUntil: isVercel ? 'domcontentloaded' : 'networkidle0'
+      waitUntil: 'domcontentloaded'
     });
+    
+    // Add a small delay to ensure rendering is complete
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -51,7 +56,8 @@ export async function generateBOLPDF(
         right: '10mm',
         bottom: '15mm',
         left: '10mm'
-      }
+      },
+      preferCSSPageSize: false
     });
     
     return new Uint8Array(pdfBuffer);

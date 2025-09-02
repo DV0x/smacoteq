@@ -30,7 +30,15 @@ export function generateBOLHTML(
     ${generateFinalNotice()}
   `;
 
-  return getHTMLTemplate().replace('{{CONTENT}}', content);
+  const finalHtml = getHTMLTemplate().replace('{{CONTENT}}', content);
+  
+  // Debug: Log if content is empty (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Content length:', content.length);
+    console.log('BOL Data shipper name:', bolData.shipper?.name || 'MISSING');
+  }
+
+  return finalHtml;
 }
 
 function getHTMLTemplate(): string {
@@ -49,10 +57,12 @@ function getHTMLTemplate(): string {
     }
     
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
       color: #2c3e50;
       line-height: 1.4;
       font-size: 10px;
+      margin: 0;
+      padding: 0;
     }
     
     .bol-container {
