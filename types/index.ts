@@ -85,6 +85,25 @@ export interface BOLData {
   special_instructions?: string;
   date_of_shipment?: string;
   
+  // Dangerous Goods Information
+  dangerous_goods?: {
+    un_number: string;
+    proper_shipping_name: string;
+    hazard_class: string;
+    packing_group?: 'I' | 'II' | 'III';
+    marine_pollutant: boolean;
+    subsidiary_risk?: string;
+    flash_point?: string;
+    emergency_contact?: string;
+    special_provisions?: string;
+    limited_quantity?: boolean;
+    ems_number?: string; // Emergency Schedule Number
+    segregation_group?: string;
+  };
+  
+  // Flag to indicate if shipment contains dangerous goods
+  has_dangerous_goods?: boolean;
+
   // Authentication
   carrier_endorsements?: string;
   signed_by?: string;

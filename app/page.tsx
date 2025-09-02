@@ -5,10 +5,11 @@ import FileUpload from '@/components/FileUpload';
 import type { ProcessingStatus as ProcessingStatusType } from '@/types';
 
 export default function Home() {
-  const [uploadMode, setUploadMode] = useState<'separate' | 'combined'>('separate');
+  const [uploadMode, setUploadMode] = useState<'separate' | 'combined' | 'dangerous'>('separate');
   const [packingList, setPackingList] = useState<File | null>(null);
   const [invoice, setInvoice] = useState<File | null>(null);
   const [combinedDocument, setCombinedDocument] = useState<File | null>(null);
+  const [dangerousGoods, setDangerousGoods] = useState<File | null>(null);
   const [bolNumber, setBolNumber] = useState<string>('');
   const [bookingNumber, setBookingNumber] = useState<string>('');
   const [status, setStatus] = useState<ProcessingStatusType>('idle');
@@ -53,6 +54,11 @@ export default function Home() {
         setError('Please upload both documents');
         return;
       }
+    } else if (uploadMode === 'dangerous') {
+      if (!packingList || !invoice || !dangerousGoods) {
+        setError('Please upload all three required documents for dangerous goods');
+        return;
+      }
     } else {
       if (!combinedDocument) {
         setError('Please upload the combined document');
@@ -79,6 +85,10 @@ export default function Home() {
     if (uploadMode === 'separate') {
       if (packingList) formData.append('packingList', packingList);
       if (invoice) formData.append('invoice', invoice);
+    } else if (uploadMode === 'dangerous') {
+      if (packingList) formData.append('packingList', packingList);
+      if (invoice) formData.append('invoice', invoice);
+      if (dangerousGoods) formData.append('dangerousGoods', dangerousGoods);
     } else {
       if (combinedDocument) formData.append('combinedDocument', combinedDocument);
     }
@@ -118,6 +128,7 @@ export default function Home() {
         setPackingList(null);
         setInvoice(null);
         setCombinedDocument(null);
+        setDangerousGoods(null);
         setBolNumber('');
         setBookingNumber('');
       }, 3000);
@@ -133,6 +144,8 @@ export default function Home() {
   // Helper function to check if form is valid for submission
   const isFormValid = uploadMode === 'separate' 
     ? (packingList && invoice)
+    : uploadMode === 'dangerous'
+    ? (packingList && invoice && dangerousGoods)
     : combinedDocument;
 
   
@@ -199,7 +212,7 @@ export default function Home() {
               </div>
               Upload Method
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               <div 
                 className={`relative border-2 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:scale-[1.02] ${
                   uploadMode === 'separate' 
@@ -277,6 +290,47 @@ export default function Home() {
                     </div>
                     <p className="text-sm text-gray-600 leading-relaxed">
                       Upload a single multi-page PDF containing both documents for streamlined processing
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div 
+                className={`relative border-2 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:scale-[1.02] ${
+                  uploadMode === 'dangerous' 
+                    ? 'border-red-500 bg-gradient-to-br from-red-50 to-orange-50 shadow-lg' 
+                    : 'border-gray-200 hover:border-red-300 hover:shadow-md bg-white'
+                }`}
+                onClick={() => setUploadMode('dangerous')}
+              >
+                {uploadMode === 'dangerous' && (
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                )}
+                <div className="flex items-start space-x-4">
+                  <input
+                    type="radio"
+                    id="dangerous"
+                    name="uploadMode"
+                    value="dangerous"
+                    checked={uploadMode === 'dangerous'}
+                    onChange={() => setUploadMode('dangerous')}
+                    className="w-5 h-5 text-red-600 mt-1"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center mb-2">
+                      <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <label htmlFor="dangerous" className="text-base font-semibold text-gray-900 cursor-pointer">
+                        Dangerous Goods Shipment
+                      </label>
+                    </div>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      Upload Packing List, Invoice, and Dangerous Goods Declaration for hazardous materials
                     </p>
                   </div>
                 </div>
@@ -401,6 +455,37 @@ export default function Home() {
                 name="invoice"
                 onFileSelect={setInvoice}
               />
+            </div>
+          ) : uploadMode === 'dangerous' ? (
+            <div className="space-y-6 mb-8">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-red-600 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <h4 className="text-sm font-semibold text-red-900 mb-1">Dangerous Goods Documentation Required</h4>
+                    <p className="text-sm text-red-700">Please upload all three required documents for dangerous goods shipments</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch">
+                <FileUpload
+                  label="Packing List"
+                  name="packingList"
+                  onFileSelect={setPackingList}
+                />
+                <FileUpload
+                  label="Commercial Invoice"
+                  name="invoice"
+                  onFileSelect={setInvoice}
+                />
+                <FileUpload
+                  label="Dangerous Goods Declaration"
+                  name="dangerousGoods"
+                  onFileSelect={setDangerousGoods}
+                />
+              </div>
             </div>
           ) : (
             <div className="mb-8">
