@@ -164,7 +164,7 @@ Return only the JSON object with extracted data.`;
       
       // Handle case where LLM returns single object instead of array
       if (!Array.isArray(bolData.dangerous_goods)) {
-        bolData.dangerous_goods = [bolData.dangerous_goods as any];
+        bolData.dangerous_goods = [bolData.dangerous_goods];
         console.log('Normalized dangerous_goods from object to array');
       }
     }
