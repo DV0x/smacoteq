@@ -22,9 +22,9 @@ export async function generateBOLPDF(
       
       browser = await puppeteer.default.launch({
         args: chromium.default.args,
-        defaultViewport: chromium.default.defaultViewport,
+        defaultViewport: { width: 1920, height: 1080 },
         executablePath: await chromium.default.executablePath(),
-        headless: chromium.default.headless,
+        headless: true,
       });
     } else {
       // Use regular Puppeteer for local development

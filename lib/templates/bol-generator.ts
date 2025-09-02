@@ -16,7 +16,7 @@ export function generateBOLHTML(
   });
 
   const content = `
-    ${generateHeader(bolNumber, bolData)}
+    ${generateHeader(bolNumber)}
     ${generateDocumentTracking(bolData)}
     ${generatePartiesSection(bolData)}
     ${generateTransportDetails(bolData, customBookingNumber)}
@@ -474,7 +474,7 @@ function getHTMLTemplate(): string {
 </html>`;
 }
 
-function generateHeader(bolNumber: string, bolData: BOLData): string {
+function generateHeader(bolNumber: string): string {
   return `
     <header class="header">
       <div class="company-section">
